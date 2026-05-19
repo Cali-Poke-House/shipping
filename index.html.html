@@ -1,0 +1,2384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AKSVR Shipping Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+<!-- FIREBASE: optional live sync. Fill in config to enable. -->
+<script type="module">
+  window.FIREBASE_CONFIG = {
+    apiKey: "AIzaSyBvvUK6y_FbqOR7NoR1Z5KtL4VCvo1YNoI",
+    authDomain: "aksvr-shipping.firebaseapp.com",
+    databaseURL: "https://aksvr-shipping-default-rtdb.firebaseio.com",
+    projectId: "aksvr-shipping",
+  };
+  if (window.FIREBASE_CONFIG.databaseURL) {
+    const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js');
+    const { getDatabase, ref, set, onValue } = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js');
+    const app = initializeApp(window.FIREBASE_CONFIG);
+    const db = getDatabase(app);
+    window.firebaseDB = { db, ref, set, onValue };
+    window.firebaseEnabled = true;
+  } else {
+    window.firebaseEnabled = false;
+  }
+</script>
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    background: #0a0a0a;
+    color: #f5f5f0;
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    padding: 16px;
+    user-select: none;
+  }
+  h1, h2, h3 { font-family: 'Archivo Black', sans-serif; font-weight: normal; }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #f5f5f0;
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .brand-line { font-size: 10px; letter-spacing: 0.3em; color: #ffb800; display: flex; align-items: center; gap: 8px; }
+  .brand-title { font-size: 28px; line-height: 1; letter-spacing: -0.02em; margin-top: 2px; }
+  .clock-block { text-align: right; }
+  .clock-time { font-family: 'Archivo Black', sans-serif; font-size: 28px; line-height: 1; }
+  .clock-date { font-size: 11px; color: #888; margin-top: 4px; }
+
+  .sync-badge { font-size: 9px; padding: 2px 8px; letter-spacing: 0.15em; border: 1px solid; }
+  .sync-badge.live { color: #00d97e; border-color: #00d97e; }
+  .sync-badge.local { color: #888; border-color: #444; }
+
+  .user-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid #2a2a2a; font-size: 11px; }
+  .user-pill.qc { border-color: #ffb800; }
+  .user-pill .role-tag { font-size: 8px; background: #ffb800; color: #0a0a0a; padding: 1px 6px; letter-spacing: 0.15em; font-weight: 700; }
+  .user-pill .role-tag.packer { background: #666; color: #fff; }
+  .user-pill .role-tag.manager { background: #00d97e; color: #0a0a0a; }
+
+  .mode-bar { display: flex; gap: 4px; margin-bottom: 16px; background: #1a1a1a; padding: 4px; }
+  .mode-btn { flex: 1; background: transparent; border: none; color: #888; padding: 12px; font-family: inherit; font-size: 12px; letter-spacing: 0.15em; cursor: pointer; font-weight: 700; }
+  .mode-btn.active { background: #ffb800; color: #0a0a0a; }
+  .mode-btn:not(.active):hover { color: #f5f5f0; background: #2a2a2a; }
+
+  .summary-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; background: #2a2a2a; margin-bottom: 16px; }
+  .summary-cell { background: #0a0a0a; padding: 14px 18px; }
+  .summary-label { font-size: 9px; letter-spacing: 0.25em; color: #888; margin-bottom: 6px; }
+  .summary-value { font-family: 'Archivo Black', sans-serif; font-size: 32px; line-height: 1; }
+  .summary-sub { font-size: 10px; color: #666; margin-top: 4px; }
+
+  /* CAUGHT UP STATES */
+  .summary-cell.caught-up {
+    background: linear-gradient(135deg, #0d2818 0%, #0a0a0a 100%);
+    border-bottom: 2px solid #00d97e;
+  }
+  .summary-cell.caught-up .summary-label { color: #00d97e; }
+  .summary-cell.caught-up .summary-value { color: #00d97e; }
+
+  .caught-up-banner {
+    background: linear-gradient(135deg, #0d2818 0%, #1a4030 100%);
+    border: 2px solid #00d97e;
+    padding: 20px;
+    margin-bottom: 16px;
+    text-align: center;
+    animation: pulse-glow 2.5s ease-in-out infinite;
+  }
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0, 217, 126, 0.4); }
+    50% { box-shadow: 0 0 0 8px rgba(0, 217, 126, 0); }
+  }
+  .caught-up-banner .banner-title {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 22px;
+    color: #00d97e;
+    margin-bottom: 4px;
+    letter-spacing: 0.05em;
+  }
+  .caught-up-banner .banner-sub {
+    font-size: 11px;
+    color: #aaa;
+    letter-spacing: 0.15em;
+  }
+
+  /* MARK CAUGHT UP BUTTON */
+  .mark-caught-up-btn {
+    background: #1a1a1a;
+    color: #555;
+    border: 1px solid #2a2a2a;
+    padding: 8px;
+    width: 100%;
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    font-weight: 700;
+    cursor: not-allowed;
+    border-top: 1px solid #2a2a2a;
+    transition: all 0.2s;
+  }
+  .mark-caught-up-btn.ready {
+    background: #0d2818;
+    color: #00d97e;
+    border-color: #00d97e;
+    cursor: pointer;
+    animation: subtle-pulse 2s ease-in-out infinite;
+  }
+  @keyframes subtle-pulse {
+    0%, 100% { background: #0d2818; }
+    50% { background: #1a4030; }
+  }
+  .mark-caught-up-btn.ready:hover {
+    background: #00d97e;
+    color: #0a0a0a;
+  }
+  .mark-caught-up-btn.is-caught-up {
+    background: #00d97e;
+    color: #0a0a0a;
+    cursor: pointer;
+    border-color: #00d97e;
+    animation: none;
+  }
+  .mark-caught-up-btn.is-caught-up:hover {
+    background: #1a4030;
+    color: #00d97e;
+  }
+
+  /* CAUGHT UP STREAM CARD */
+  .big-counter.caught-up {
+    border-color: #00d97e;
+    background: linear-gradient(135deg, #0d2818 0%, #0d0d0d 80%);
+  }
+  .big-counter.caught-up .big-counter-header {
+    background: #0d2818;
+    border-color: #00d97e;
+  }
+  .big-counter.caught-up .counter-number {
+    color: #00d97e;
+  }
+  .caught-up-badge {
+    display: inline-block;
+    background: #00d97e;
+    color: #0a0a0a;
+    font-size: 9px;
+    padding: 2px 8px;
+    letter-spacing: 0.2em;
+    font-weight: 700;
+    margin-left: 8px;
+  }
+
+  /* PACKER KPI CARDS */
+  .packer-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #2a2a2a;
+  }
+  .packer-section-title {
+    font-size: 11px;
+    letter-spacing: 0.3em;
+    color: #ffb800;
+    font-weight: 700;
+  }
+  .packer-section-sub {
+    font-size: 10px;
+    color: #666;
+    letter-spacing: 0.1em;
+  }
+  .packer-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .packer-card {
+    background: #0d0d0d;
+    border: 1px solid #2a2a2a;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .packer-card.is-me {
+    border-color: #ffb800;
+    border-width: 2px;
+    background: #1a1408;
+  }
+  .packer-card.is-leading {
+    border-left: 4px solid #00d97e;
+  }
+  .packer-card .me-tag {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 8px;
+    letter-spacing: 0.2em;
+    background: #ffb800;
+    color: #0a0a0a;
+    padding: 2px 8px;
+    font-weight: 700;
+  }
+  .packer-card-name {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 20px;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .packer-card-role {
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: #888;
+    margin-bottom: 12px;
+  }
+  .packer-card-main {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .packer-card-big {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 48px;
+    line-height: 1;
+    color: #00d97e;
+  }
+  .packer-card-pct {
+    font-size: 14px;
+    color: #ffb800;
+    font-weight: 700;
+  }
+  .packer-card-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid #2a2a2a;
+  }
+  .packer-card-stat {
+    text-align: center;
+  }
+  .packer-card-stat-label {
+    font-size: 8px;
+    letter-spacing: 0.15em;
+    color: #666;
+    margin-bottom: 4px;
+  }
+  .packer-card-stat-value {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 18px;
+    line-height: 1;
+  }
+  .packer-card-stat-value.good { color: #00d97e; }
+  .packer-card-stat-value.warn { color: #ffb800; }
+  .packer-card-stat-value.bad { color: #ff4444; }
+  .packer-card-stat-value.neutral { color: #f5f5f0; }
+  .packer-card-streams {
+    margin-top: 10px;
+    font-size: 10px;
+    color: #888;
+    line-height: 1.5;
+  }
+  .packer-card-streams strong { color: #ddd; }
+  .packer-card-pct-bar {
+    height: 3px;
+    background: #1a1a1a;
+    margin-top: 10px;
+    overflow: hidden;
+  }
+  .packer-card-pct-fill {
+    height: 100%;
+    background: #ffb800;
+    transition: width 0.4s;
+  }
+  .packer-card.no-data .packer-card-big { color: #444; }
+  .packer-card.no-data .packer-card-stats { opacity: 0.4; }
+
+  .my-card-large {
+    background: #0d0d0d;
+    border: 2px solid #ffb800;
+    padding: 24px;
+    margin-bottom: 20px;
+    text-align: center;
+    background: linear-gradient(135deg, #1a1408 0%, #0d0d0d 100%);
+  }
+  .my-card-large .me-tag-large {
+    display: inline-block;
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    background: #ffb800;
+    color: #0a0a0a;
+    padding: 3px 12px;
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+  .my-card-large .my-name {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 28px;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .my-card-large .my-shipped {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 80px;
+    line-height: 1;
+    color: #00d97e;
+    margin: 12px 0 6px;
+  }
+  .my-card-large .my-sublabel {
+    font-size: 11px;
+    color: #888;
+    letter-spacing: 0.2em;
+    margin-bottom: 16px;
+  }
+  .my-card-large .my-mini-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    padding-top: 16px;
+    border-top: 1px solid #2a2a2a;
+    max-width: 500px;
+    margin: 0 auto;
+  }
+  .my-card-large .my-mini-stat-label {
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: #666;
+    margin-bottom: 4px;
+  }
+  .my-card-large .my-mini-stat-value {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 24px;
+    line-height: 1;
+  }
+
+  .quick-mode { display: none; }
+  .quick-mode.active { display: block; }
+
+  .role-hint { font-size: 11px; margin-bottom: 12px; letter-spacing: 0.15em; text-align: center; padding: 10px; border: 1px solid #2a2a2a; }
+  .role-hint.qc { color: #ffb800; }
+  .role-hint.packer { color: #ff8888; background: #1a0a0a; border-color: #4a1a1a; }
+
+  .big-counter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .big-counter { background: #0d0d0d; border: 2px solid #2a2a2a; overflow: hidden; display: flex; flex-direction: column; }
+  .big-counter.paused { opacity: 0.4; }
+  .big-counter.locked .big-button { background: #2a2a2a; color: #555; cursor: not-allowed; }
+  .big-counter.locked .big-button:hover { background: #2a2a2a; }
+  .big-counter.locked .counter-action { color: #444; cursor: not-allowed; }
+
+  .big-counter-header { padding: 14px 20px; background: #1a1a1a; border-bottom: 1px solid #2a2a2a; display: flex; justify-content: space-between; align-items: center; }
+  .big-counter-name { font-family: 'Archivo Black', sans-serif; font-size: 18px; }
+  .live-dot { width: 10px; height: 10px; background: #00d97e; border-radius: 50%; animation: pulse 2s infinite; display: inline-block; margin-right: 8px; vertical-align: middle; }
+  .live-dot.paused { background: #555; animation: none; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .counter-body { padding: 24px 20px; text-align: center; }
+  .counter-number { font-family: 'Archivo Black', sans-serif; font-size: 96px; line-height: 0.9; color: #00d97e; margin: 8px 0 16px; }
+  .counter-label { font-size: 10px; letter-spacing: 0.25em; color: #888; }
+
+  .big-button { width: 100%; background: #ffb800; color: #0a0a0a; border: none; padding: 28px; font-family: 'Archivo Black', sans-serif; font-size: 32px; cursor: pointer; transition: all 0.1s; border-top: 2px solid #2a2a2a; }
+  .big-button:hover { background: #ffc933; }
+  .big-button:active { background: #00d97e; transform: scale(0.98); }
+  .big-button.flash { background: #00d97e !important; }
+
+  .counter-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid #2a2a2a; }
+  .counter-actions-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .counter-action.caught { color: #00d97e; }
+  .counter-action.caught:hover { color: #fff; background: #0d2818; }
+  .counter-action.setaside { color: #b0a0c8; }
+  .counter-action.setaside:hover { color: #fff; background: #1a1228; }
+  @media (max-width: 700px) {
+    .counter-actions-4 { grid-template-columns: 1fr 1fr; }
+  }
+  .counter-action { background: #0d0d0d; border: none; border-right: 1px solid #2a2a2a; color: #f5f5f0; padding: 14px 8px; font-family: inherit; font-size: 11px; letter-spacing: 0.1em; cursor: pointer; }
+  .counter-action:last-child { border-right: none; }
+  .counter-action:hover { background: #1a1a1a; color: #ffb800; }
+  .counter-action.error { color: #ff4444; }
+
+  /* PACKER POPUP */
+  .packer-popup-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; z-index: 95; padding: 16px; }
+  .packer-popup-overlay.show { display: flex; }
+  .packer-popup { background: #1a1a1a; border: 2px solid #ffb800; padding: 28px; max-width: 480px; width: 100%; text-align: center; }
+  .packer-popup h2 { font-size: 22px; margin-bottom: 6px; color: #ffb800; }
+  .packer-popup .sub { color: #aaa; font-size: 12px; margin-bottom: 18px; }
+  .packer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+  .packer-btn { background: #2a2a2a; border: 2px solid #444; color: #f5f5f0; padding: 18px 12px; font-family: 'Archivo Black', sans-serif; font-size: 18px; letter-spacing: 0.05em; cursor: pointer; transition: all 0.15s; }
+  .packer-btn:hover { background: #ffb800; color: #0a0a0a; border-color: #ffb800; }
+  .packer-btn.other { background: #1a1a1a; font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+  .packer-cancel { width: 100%; background: transparent; border: 1px solid #555; color: #888; padding: 10px; font-family: inherit; font-size: 11px; letter-spacing: 0.15em; cursor: pointer; margin-top: 8px; }
+  .packer-cancel:hover { color: #f5f5f0; border-color: #f5f5f0; }
+  .packer-other-input { background: #0a0a0a; border: 1px solid #444; color: #f5f5f0; padding: 10px; font-family: inherit; font-size: 14px; width: 100%; margin-bottom: 10px; display: none; }
+  .packer-other-input.show { display: block; }
+
+  .undo-bar { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px); background: #1a1a1a; border: 1px solid #ffb800; padding: 12px 20px; display: flex; align-items: center; gap: 16px; z-index: 50; transition: transform 0.3s; }
+  .undo-bar.show { transform: translateX(-50%) translateY(0); }
+  .undo-bar .msg { font-size: 12px; color: #ddd; }
+  .undo-bar .undo-btn { background: #ffb800; color: #0a0a0a; border: none; padding: 6px 14px; font-family: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.15em; cursor: pointer; }
+
+  .full-mode { display: none; }
+  .full-mode.active { display: block; }
+
+  .full-controls { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .btn { background: transparent; border: 1px solid #444; color: #f5f5f0; padding: 10px 16px; font-family: inherit; font-size: 11px; letter-spacing: 0.15em; cursor: pointer; }
+  .btn:hover { background: #f5f5f0; color: #0a0a0a; }
+  .btn-primary { background: #ffb800; color: #0a0a0a; border-color: #ffb800; font-weight: 700; }
+  .btn-primary:hover { background: #fff; }
+  .btn-danger { border-color: #ff4444; color: #ff4444; }
+  .btn-danger:hover { background: #ff4444; color: #0a0a0a; }
+  .btn-success { background: #00d97e; color: #0a0a0a; border-color: #00d97e; font-weight: 700; }
+  .btn-success:hover { background: #fff; border-color: #fff; }
+  .btn-sm { padding: 6px 10px; font-size: 10px; }
+  .icon-btn { background: transparent; border: 1px solid #2a2a2a; color: #f5f5f0; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; }
+  .icon-btn:hover { background: #f5f5f0; color: #0a0a0a; }
+
+  .full-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .full-grid { grid-template-columns: 1fr; } }
+
+  .stream-detail { border: 1px solid #2a2a2a; margin-bottom: 12px; }
+  .stream-detail-header { padding: 12px 14px; background: #1a1a1a; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2a2a2a; }
+  .stream-detail-name { font-family: 'Archivo Black', sans-serif; font-size: 16px; }
+  .stream-detail-stages { padding: 4px 12px; }
+  .stage-line { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 8px; padding: 10px 4px; border-bottom: 1px solid #1a1a1a; }
+  .stage-line:last-child { border-bottom: none; }
+  .stage-name-label { font-size: 13px; font-weight: 700; }
+  .stage-meta { font-size: 10px; color: #888; margin-top: 2px; }
+  .stage-count { font-family: 'Archivo Black', sans-serif; font-size: 20px; min-width: 36px; text-align: center; color: #ffb800; }
+  .stage-count.high { color: #ff4444; }
+
+  .panel { border: 1px solid #2a2a2a; padding: 14px; margin-bottom: 14px; }
+  .panel-title { font-size: 10px; letter-spacing: 0.3em; color: #ffb800; font-weight: 700; margin-bottom: 12px; }
+
+  /* PER-PACKER SCOREBOARD */
+  .scoreboard { border: 2px solid #ffb800; padding: 14px; margin-bottom: 14px; }
+  .scoreboard .panel-title { color: #ffb800; }
+  .packer-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 12px 8px; border-bottom: 1px solid #2a2a2a; }
+  .packer-row:last-child { border-bottom: none; }
+  .packer-row .pname { font-family: 'Archivo Black', sans-serif; font-size: 14px; }
+  .packer-row .pstat { font-size: 12px; color: #aaa; font-variant-numeric: tabular-nums; text-align: right; }
+  .packer-row .pstat strong { color: #00d97e; font-size: 18px; font-family: 'Archivo Black', sans-serif; }
+  .packer-row .pct-bar { grid-column: 1 / -1; height: 4px; background: #1a1a1a; margin-top: 6px; overflow: hidden; }
+  .packer-row .pct-fill { height: 100%; background: #ffb800; transition: width 0.4s; }
+  .packer-row .pct-label { font-size: 10px; color: #888; margin-top: 4px; grid-column: 1 / -1; }
+
+  .reconcile-panel { border: 2px solid #ffb800; padding: 16px; margin-bottom: 14px; }
+  .reconcile-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 8px 0; font-size: 13px; }
+  .reconcile-row .label { color: #aaa; }
+  .reconcile-row .value { font-family: 'Archivo Black', sans-serif; font-size: 20px; }
+  .reconcile-row input { background: #0a0a0a; border: 1px solid #444; color: #f5f5f0; padding: 6px 10px; font-family: 'Archivo Black', sans-serif; font-size: 18px; width: 80px; text-align: center; }
+  .reconcile-result { margin-top: 10px; padding: 12px; text-align: center; font-weight: 700; letter-spacing: 0.1em; font-size: 13px; }
+  .reconcile-result.match { background: #0d2818; color: #00d97e; border: 1px solid #00d97e; }
+  .reconcile-result.mismatch { background: #2a0a0a; color: #ff4444; border: 1px solid #ff4444; }
+  .reconcile-result.pending { background: #1a1a1a; color: #888; }
+
+  .goal-line { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid #1a1a1a; }
+  .goal-line:last-child { border-bottom: none; }
+  .goal-name { font-size: 12px; }
+  .goal-target-label { font-size: 9px; color: #666; margin-top: 2px; letter-spacing: 0.1em; }
+  .goal-counter { display: flex; align-items: center; gap: 4px; }
+  .goal-num { font-family: 'Archivo Black', sans-serif; font-size: 18px; min-width: 32px; text-align: center; }
+  .goal-num.good { color: #00d97e; }
+  .goal-num.bad { color: #ff4444; }
+  .goal-num.pending { color: #ffb800; }
+
+  .progress-bar { height: 8px; background: #1a1a1a; overflow: hidden; margin: 8px 0; }
+  .progress-fill { height: 100%; background: #ffb800; transition: width 0.4s; }
+  .progress-fill.done { background: #00d97e; }
+
+  .note-display { font-size: 12px; color: #ddd; line-height: 1.5; min-height: 28px; }
+  .note-display.empty { color: #555; font-style: italic; }
+
+  .name-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.94); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 16px; }
+  .name-box { background: #1a1a1a; border: 2px solid #ffb800; padding: 24px; max-width: 420px; width: 100%; }
+  .name-box h2 { font-size: 22px; margin-bottom: 8px; text-align: center; }
+  .name-box p { color: #aaa; font-size: 12px; margin-bottom: 16px; text-align: center; line-height: 1.5; }
+  .quick-names { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; justify-content: center; }
+  .quick-name { background: #2a2a2a; border: 1px solid #444; color: #f5f5f0; padding: 8px 14px; font-family: inherit; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .quick-name:hover { background: #ffb800; color: #0a0a0a; border-color: #ffb800; }
+  .quick-name .role-mini { font-size: 8px; background: #ffb800; color: #0a0a0a; padding: 1px 5px; letter-spacing: 0.1em; font-weight: 700; }
+  .quick-name:hover .role-mini { background: #0a0a0a; color: #ffb800; }
+  .quick-name .role-mini.packer { background: #666; color: #fff; }
+  .quick-name .role-mini.manager { background: #00d97e; color: #0a0a0a; }
+  .name-box input { width: 100%; background: #0a0a0a; border: 1px solid #444; color: #f5f5f0; padding: 10px; font-family: inherit; font-size: 14px; margin-bottom: 12px; }
+  .role-picker { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+  .role-option { background: #2a2a2a; border: 2px solid #2a2a2a; color: #f5f5f0; padding: 10px; font-family: inherit; font-size: 11px; letter-spacing: 0.1em; cursor: pointer; text-align: center; font-weight: 700; }
+  .role-option.selected { border-color: #ffb800; background: #1a1a1a; color: #ffb800; }
+  .role-option .role-desc { font-size: 9px; font-weight: normal; color: #888; margin-top: 3px; letter-spacing: 0; }
+
+  .activity-log { max-height: 280px; overflow-y: auto; font-size: 11px; border: 1px solid #2a2a2a; background: #050505; }
+
+  .error-row { border: 1px solid #2a2a2a; background: #0d0808; padding: 10px 12px; margin-bottom: 6px; font-size: 11px; }
+  .error-row.caught { border-left: 3px solid #00d97e; }
+  .error-row.shipped { border-left: 3px solid #ff4444; background: #1a0a0a; }
+  .error-row-head { display: flex; justify-content: space-between; margin-bottom: 6px; }
+  .error-tag { font-size: 9px; font-weight: 700; letter-spacing: 0.15em; padding: 2px 8px; }
+  .error-tag.caught { background: #00d97e; color: #0a0a0a; }
+  .error-tag.shipped { background: #ff4444; color: #fff; }
+  .error-order { font-family: 'Archivo Black', sans-serif; font-size: 13px; color: #f5f5f0; }
+  .error-meta { font-size: 10px; color: #888; line-height: 1.6; }
+  .error-meta strong { color: #ddd; }
+  .error-note { font-size: 11px; color: #ddd; margin-top: 6px; font-style: italic; }
+  .error-time { font-size: 9px; color: #666; }
+
+  .setaside-row { border: 1px solid #2a2a2a; background: #100a14; padding: 10px 12px; margin-bottom: 6px; font-size: 11px; border-left: 3px solid #b0a0c8; }
+  .setaside-row.resolved { opacity: 0.5; border-left-color: #00d97e; }
+  .setaside-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .setaside-order { font-family: 'Archivo Black', sans-serif; font-size: 13px; }
+  .setaside-actions { display: flex; gap: 4px; margin-top: 6px; }
+  .setaside-btn { background: transparent; border: 1px solid #555; color: #ddd; padding: 3px 8px; font-family: inherit; font-size: 9px; letter-spacing: 0.1em; cursor: pointer; }
+  .setaside-btn:hover { background: #555; color: #fff; }
+  .setaside-btn.resolve { border-color: #00d97e; color: #00d97e; }
+  .setaside-btn.resolve:hover { background: #00d97e; color: #0a0a0a; }
+  .activity-log::-webkit-scrollbar { width: 6px; }
+  .activity-log::-webkit-scrollbar-thumb { background: #2a2a2a; }
+  .log-entry { padding: 6px 10px; border-bottom: 1px solid #1a1a1a; display: grid; grid-template-columns: 50px 80px 1fr; gap: 8px; }
+  .log-time { color: #666; font-size: 10px; }
+  .log-user { color: #ffb800; font-weight: 700; font-size: 10px; }
+  .log-msg { color: #ccc; font-size: 11px; }
+  .log-entry.flagged { background: #2a0a0a; }
+  .log-entry.flagged .log-msg { color: #ff8888; }
+
+  .footer { margin-top: 20px; padding-top: 12px; border-top: 1px solid #2a2a2a; display: flex; justify-content: space-between; font-size: 10px; color: #555; letter-spacing: 0.1em; flex-wrap: wrap; gap: 8px; }
+
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; z-index: 90; padding: 16px; }
+  .modal-overlay.show { display: flex; }
+  .modal-box { background: #1a1a1a; border: 1px solid #ffb800; padding: 24px; max-width: 420px; width: 100%; }
+  .modal-box h3 { font-size: 18px; margin-bottom: 12px; }
+  .modal-box label { font-size: 10px; letter-spacing: 0.2em; color: #888; display: block; margin-bottom: 4px; margin-top: 12px; }
+  .modal-box input, .modal-box textarea { width: 100%; background: #0a0a0a; border: 1px solid #444; color: #f5f5f0; padding: 8px; font-family: inherit; font-size: 13px; }
+  .modal-box select.modal-select { width: 100%; background: #0a0a0a; border: 1px solid #444; color: #f5f5f0; padding: 8px; font-family: inherit; font-size: 13px; cursor: pointer; }
+  .modal-box select.modal-select option { background: #1a1a1a; color: #f5f5f0; }
+  .modal-buttons { display: flex; gap: 8px; margin-top: 20px; justify-content: flex-end; }
+
+  .denied-toast { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2a0a0a; border: 2px solid #ff4444; padding: 24px 32px; z-index: 200; text-align: center; display: none; }
+  .denied-toast.show { display: block; animation: shake 0.4s; }
+  @keyframes shake { 0%, 100% { transform: translate(-50%, -50%); } 25% { transform: translate(-52%, -50%); } 75% { transform: translate(-48%, -50%); } }
+  .denied-toast .icon { font-size: 32px; margin-bottom: 8px; }
+  .denied-toast .title { font-family: 'Archivo Black'; font-size: 18px; color: #ff4444; margin-bottom: 4px; }
+  .denied-toast .msg { font-size: 12px; color: #ddd; }
+
+  @media (max-width: 600px) {
+    body { padding: 10px; }
+    .summary-bar { grid-template-columns: 1fr 1fr; }
+    .brand-title { font-size: 22px; }
+    .counter-number { font-size: 72px; }
+    .big-button { padding: 22px; font-size: 26px; }
+    .packer-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="denied-toast" id="deniedToast">
+  <div class="icon">✋</div>
+  <div class="title">QC ONLY</div>
+  <div class="msg" id="deniedMsg">Only Hunter/QC can tap +1. Packers — please grab Hunter.</div>
+</div>
+
+<!-- USER NAME -->
+<div class="name-overlay" id="nameOverlay" style="display:none;">
+  <div class="name-box">
+    <h2>WHO'S USING THE BOARD?</h2>
+    <p>Pick your name. If you're new, type it and pick a role.</p>
+    <div class="quick-names" id="quickNames"></div>
+    <input type="text" id="nameInput" placeholder="Or type a new name..." autocomplete="off">
+    <div id="rolePickerWrap" style="display:none;">
+      <label style="font-size:10px; letter-spacing:0.2em; color:#888; display:block; margin-bottom:6px;">ROLE FOR THIS NAME:</label>
+      <div class="role-picker">
+        <button class="role-option" data-role="packer" onclick="selectRole('packer')">PACKER<div class="role-desc">can't tap +1</div></button>
+        <button class="role-option" data-role="qc" onclick="selectRole('qc')">QC / LEAD<div class="role-desc">can tap +1</div></button>
+        <button class="role-option" data-role="manager" onclick="selectRole('manager')">MANAGER<div class="role-desc">full access</div></button>
+      </div>
+    </div>
+    <button class="btn btn-primary" style="width:100%;" onclick="saveName()">CONTINUE</button>
+  </div>
+</div>
+
+<!-- PACKER ATTRIBUTION POPUP -->
+<div class="packer-popup-overlay" id="packerPopup">
+  <div class="packer-popup">
+    <h2>WHO PACKED IT?</h2>
+    <div class="sub" id="packerPopupSub">Quick tap — the person who physically packed the order</div>
+    <div class="packer-grid" id="packerGrid"></div>
+    <input type="text" class="packer-other-input" id="packerOther" placeholder="Type a name and press enter">
+    <button class="packer-cancel" onclick="cancelPackerPopup()">CANCEL — DON'T LOG SHIPMENT</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-box" id="modalBox"></div>
+</div>
+
+<!-- HEADER -->
+<div class="header">
+  <div>
+    <div class="brand-line">
+      <span>● LIVE · AKSVR SHIPPING OPS</span>
+      <span class="sync-badge local" id="syncBadge">LOCAL</span>
+    </div>
+    <div class="brand-title">SHIPPING BOARD</div>
+  </div>
+  <div class="clock-block">
+    <div class="clock-time" id="clock">--:--</div>
+    <div class="clock-date" id="dateLine">—</div>
+    <div style="margin-top: 6px;">
+      <span class="user-pill" id="userPill">
+        <span class="role-tag" id="userRoleTag">—</span>
+        <span id="currentUser">NO USER</span>
+        <button class="btn-sm btn" style="padding: 2px 8px; margin-left: 4px;" onclick="changeUser()">SWITCH</button>
+      </span>
+    </div>
+  </div>
+</div>
+
+<div class="mode-bar">
+  <button class="mode-btn active" id="modeQuick" onclick="setMode('quick')">⚡ QUICK PACK</button>
+  <button class="mode-btn" id="modeFull" onclick="setMode('full')">⚙ FULL BOARD</button>
+  <button class="mode-btn" id="modeEOD" onclick="setMode('eod')">📋 END OF DAY</button>
+</div>
+
+<!-- CAUGHT UP BANNER (shows only when all streams caught up) -->
+<div class="caught-up-banner" id="caughtUpBanner" style="display:none;">
+  <div class="banner-title" id="bannerTitle">🎉 ALL STREAMS CAUGHT UP — DAILY GOAL HIT</div>
+  <div class="banner-sub" id="bannerSub">Great work team. Nothing left in the pipeline.</div>
+</div>
+
+<div class="summary-bar">
+  <div class="summary-cell">
+    <div class="summary-label">▸ SHIPPED TODAY</div>
+    <div class="summary-value" id="sumCompleted" style="color:#00d97e;">0</div>
+    <div class="summary-sub">verified by QC</div>
+  </div>
+  <div class="summary-cell" id="caughtUpCell">
+    <div class="summary-label">▸ STREAMS CAUGHT UP</div>
+    <div class="summary-value" id="sumCaughtUp">0/0</div>
+    <div class="summary-sub" id="sumCaughtUpSub">daily goal: all streams clear</div>
+  </div>
+  <div class="summary-cell">
+    <div class="summary-label">▸ BACKLOG</div>
+    <div class="summary-value" id="sumBacklog" style="color:#ffb800;">0</div>
+    <div class="summary-sub">in stages</div>
+  </div>
+  <div class="summary-cell">
+    <div class="summary-label">▸ ERRORS</div>
+    <div class="summary-value" id="sumErrors" style="color:#00d97e;">0</div>
+    <div class="summary-sub">limit: <span id="sumErrorTarget">3</span></div>
+  </div>
+</div>
+
+<!-- QUICK MODE -->
+<div class="quick-mode active" id="quickMode">
+  <div id="roleHint"></div>
+
+  <!-- PACKER KPI CARDS -->
+  <div id="packerKpiArea">
+    <div class="packer-section-header">
+      <span class="packer-section-title" id="packerSectionTitle">▸ TODAY'S PACKER PERFORMANCE</span>
+      <span class="packer-section-sub" id="packerSectionSub">live · auto-updated</span>
+    </div>
+    <div id="packerCardsContainer"></div>
+  </div>
+
+  <div class="packer-section-header" style="margin-top: 16px;">
+    <span class="packer-section-title">▸ LOG SHIPMENTS BY STREAM</span>
+    <span class="packer-section-sub">tap +1 when QC verified</span>
+  </div>
+  <div class="big-counter-grid" id="quickCounters"></div>
+</div>
+
+<!-- FULL MODE -->
+<div class="full-mode" id="fullMode">
+  <div class="full-controls">
+    <button class="btn btn-primary" onclick="addStream()">+ ADD STREAM</button>
+    <button class="btn" onclick="manageRoster()">👥 MANAGE PACKERS</button>
+    <button class="btn" onclick="toggleActivity()">SHOW ACTIVITY LOG</button>
+    <button class="btn" onclick="exportDay()">EXPORT EOD LOG</button>
+  </div>
+
+  <div class="full-grid">
+    <div>
+      <div style="font-size: 10px; letter-spacing: 0.3em; color: #ffb800; font-weight: 700; margin-bottom: 10px;">▸ STREAM DETAIL VIEW</div>
+      <div id="detailStreams"></div>
+    </div>
+
+    <div>
+      <!-- PER-PACKER SCOREBOARD -->
+      <div class="scoreboard">
+        <div class="panel-title">▸ PER-PACKER SCOREBOARD</div>
+        <div id="scoreboardBody"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">▸ DAILY GOALS</div>
+        <div id="goalsPanel"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">▸ PROGRESS TO GOAL</div>
+        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
+          <div style="font-size:10px; color:#888;">TODAY</div>
+          <div id="progressPct" style="font-family:'Archivo Black'; font-size:28px;">0%</div>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%;"></div></div>
+        <div style="display:flex; justify-content:space-between; font-size:11px; color:#666; margin-top: 4px;">
+          <span id="progressDone">0 done</span>
+          <span id="progressTodo">0 to go</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <div class="panel-title" style="margin-bottom:0;">▸ MORNING BRIEF</div>
+          <button class="icon-btn" onclick="editNote('morningNote', 'Morning brief')">✎</button>
+        </div>
+        <div class="note-display" id="morningNoteDisplay"></div>
+      </div>
+
+      <div class="panel" id="errorLogPanel">
+        <div class="panel-title" style="color:#ff8888;">▸ ERROR LOG · CAUGHT & SHIPPED</div>
+        <div id="errorLogBody" style="max-height:280px; overflow-y:auto;"></div>
+      </div>
+
+      <div class="panel" id="setAsidePanel">
+        <div class="panel-title" style="color:#b0a0c8;">▸ PACKAGES SET ASIDE</div>
+        <div id="setAsideBody" style="max-height:280px; overflow-y:auto;"></div>
+      </div>
+
+      <div class="panel" id="activityPanel" style="display:none;">
+        <div class="panel-title">▸ ACTIVITY LOG (LAST 50)</div>
+        <div class="activity-log" id="activityLog"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- END OF DAY MODE -->
+<div class="full-mode" id="eodMode">
+  <div style="font-size: 11px; color: #888; margin-bottom: 16px; letter-spacing: 0.15em; text-align: center;">
+    ▸ END OF DAY RECONCILIATION & RECAP
+  </div>
+
+  <div class="full-grid">
+    <div>
+      <div class="reconcile-panel">
+        <div class="panel-title" style="color:#ffb800;">▸ RECONCILIATION CHECK</div>
+        <div style="font-size:11px; color:#aaa; margin-bottom: 12px; line-height: 1.5;">
+          Compare the board total to what your shipping software shows. If they don't match, something was logged wrong or padded.
+        </div>
+        <div class="reconcile-row">
+          <span class="label">Board says shipped:</span>
+          <span class="value" style="color:#00d97e;" id="reconcileBoard">0</span>
+        </div>
+        <div class="reconcile-row">
+          <span class="label">Actual shipping count:</span>
+          <input type="number" id="reconcileActual" oninput="updateReconcile()" placeholder="enter">
+        </div>
+        <div class="reconcile-row">
+          <span class="label">Difference:</span>
+          <span class="value" id="reconcileDiff">—</span>
+        </div>
+        <div class="reconcile-result pending" id="reconcileResult">
+          Enter actual shipping count to check
+        </div>
+      </div>
+
+      <div class="panel">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <div class="panel-title" style="margin-bottom:0; color:#00d97e;">▸ END-OF-DAY RECAP</div>
+          <button class="icon-btn" onclick="editNote('endOfDayNote', 'End-of-day recap')">✎</button>
+        </div>
+        <div class="note-display" id="eodNoteDisplay2"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">▸ OVERNIGHT BACKLOG COUNT</div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button class="icon-btn" onclick="adjustGoal('overnightBacklog',-1)">−</button>
+          <div style="font-family:'Archivo Black'; font-size:36px;" id="overnightDisplay">0</div>
+          <button class="icon-btn" onclick="adjustGoal('overnightBacklog',1)">+</button>
+          <span style="font-size:11px; color:#666; margin-left:12px;">goal: ≤ 10</span>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button class="btn btn-success" onclick="exportDay()">📥 EXPORT EOD LOG FILE</button>
+        <button class="btn btn-danger" onclick="resetDay()">RESET FOR NEXT DAY</button>
+      </div>
+    </div>
+
+    <div>
+      <!-- EOD SCOREBOARD -->
+      <div class="scoreboard">
+        <div class="panel-title">▸ TODAY'S PACKER PERFORMANCE</div>
+        <div id="eodScoreboard"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">▸ TODAY'S NUMBERS</div>
+        <div style="font-size:12px; line-height:2; color:#ddd;">
+          <div style="display:flex; justify-content:space-between;"><span>Shipped:</span><strong id="eodShipped">0</strong></div>
+          <div style="display:flex; justify-content:space-between;"><span>Goal:</span><strong id="eodGoal">150</strong></div>
+          <div style="display:flex; justify-content:space-between;"><span>Backlog left:</span><strong id="eodBacklog">0</strong></div>
+          <div style="display:flex; justify-content:space-between;"><span>Errors:</span><strong id="eodErrors">0</strong></div>
+          <div style="display:flex; justify-content:space-between;"><span>Reopens:</span><strong id="eodReopens">0</strong></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">▸ PER STREAM</div>
+        <div id="eodPerStream" style="font-size:12px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="undo-bar" id="undoBar">
+  <span class="msg" id="undoMsg">Action recorded</span>
+  <button class="undo-btn" onclick="undoLast()">UNDO</button>
+</div>
+
+<div class="footer">
+  <span>● AKSVR · INTERNAL OPS</span>
+  <span id="lastUpdateLabel">LAST UPDATE: —</span>
+  <span>QC TAPS · PACKER GETS CREDIT · BOARD TRACKS BOTH</span>
+</div>
+
+<script>
+const STORAGE_KEY = 'aksvr_board_v5';
+const USER_KEY = 'aksvr_user_v5';
+const ACTIVITY_KEY = 'aksvr_activity_v5';
+const KNOWN_USERS_KEY = 'aksvr_known_users_v5';
+const ROSTER_KEY = 'aksvr_packer_roster_v5';
+
+const DEFAULT_ROSTER = ['Joe', 'Donald', 'Hunter'];
+
+const DEFAULT_DATA = {
+  streams: [
+    { id: 's1', name: 'TT1 LIVE', active: true, completed: 0, caughtUp: false,
+      stages: [
+        { id: 'wb', name: 'Waiting Bins', orders: 0, assigned: '—', notes: '' },
+        { id: 'sm', name: 'Sorting / Matching', orders: 0, assigned: '', notes: '' },
+        { id: 'pk', name: 'Packaging', orders: 0, assigned: '', notes: '' },
+        { id: 'qc', name: 'QC Check', orders: 0, assigned: '', notes: '' },
+      ] },
+    { id: 's2', name: 'EBAY LIVE', active: true, completed: 0, caughtUp: false,
+      stages: [
+        { id: 'wb', name: 'Waiting Bins', orders: 0, assigned: '—', notes: '' },
+        { id: 'sm', name: 'Sorting / Matching', orders: 0, assigned: '', notes: '' },
+        { id: 'pk', name: 'Packaging', orders: 0, assigned: '', notes: '' },
+        { id: 'qc', name: 'QC Check', orders: 0, assigned: '', notes: '' },
+      ] },
+    { id: 's3', name: 'TT3 LIVE', active: true, completed: 0, caughtUp: false,
+      stages: [
+        { id: 'wb', name: 'Waiting Bins', orders: 0, assigned: '—', notes: '' },
+        { id: 'sm', name: 'Sorting / Matching', orders: 0, assigned: '', notes: '' },
+        { id: 'pk', name: 'Packaging', orders: 0, assigned: '', notes: '' },
+        { id: 'qc', name: 'QC Check', orders: 0, assigned: '', notes: '' },
+      ] },
+  ],
+  goals: {
+    ordersCompleted: { current: 0, target: 150 },
+    errorCount: { current: 0, target: 3, lowerIsBetter: true },
+    overnightBacklog: { current: 0, target: 10, lowerIsBetter: true },
+    reopenedPackages: { current: 0, target: 0, lowerIsBetter: true },
+  },
+  morningNote: '',
+  endOfDayNote: '',
+  reconcileActual: '',
+  mode: 'quick',
+  // Per-packer shipment counts {packerName: {streamId: count}}
+  packerStats: {},
+  // LEGACY (kept for backward compat - represents "errors made" - now equals errorsCaught + errorsShipped per person)
+  packerErrors: {},
+  packerReopens: {},
+  // NEW: detailed error tracking
+  // packerErrorsCaught: who MADE the error that Hunter caught (good - system worked)
+  // packerErrorsShipped: who MADE the error that escaped (bad - shipped to customer)
+  // packerErrorsSavedBy: who CAUGHT the error during QC (typically Hunter)
+  packerErrorsCaught: {},
+  packerErrorsShipped: {},
+  packerErrorsSavedBy: {},
+  // Detailed error log: [{type: 'caught'|'shipped', streamId, madeBy, caughtBy, note, timeToFix, orderNumber, timestamp}]
+  errorLog: [],
+  // Set Aside packages: [{streamId, packedBy, orderNumber, reason, timestamp, resolved}]
+  setAsideLog: [],
+  // Total set aside counter per packer
+  packerSetAside: {},
+};
+
+let data = loadData();
+let currentUser = null;
+let activityVisible = false;
+let undoStack = [];
+let undoTimer = null;
+let pendingRole = null;
+let pendingShipment = null; // {streamId, batchSize}
+
+try {
+  const u = localStorage.getItem(USER_KEY);
+  if (u) currentUser = JSON.parse(u);
+} catch(e) {}
+
+/* Firebase */
+let isApplyingRemoteUpdate = false;
+function setupFirebaseSync() {
+  if (!window.firebaseEnabled) return;
+  document.getElementById('syncBadge').textContent = '● LIVE SYNC';
+  document.getElementById('syncBadge').className = 'sync-badge live';
+  const { db, ref, onValue } = window.firebaseDB;
+  onValue(ref(db, 'aksvr/board'), (snap) => {
+    const remote = snap.val();
+    if (remote && JSON.stringify(remote) !== JSON.stringify(data)) {
+      isApplyingRemoteUpdate = true;
+      data = { ...JSON.parse(JSON.stringify(DEFAULT_DATA)), ...remote };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      render();
+      isApplyingRemoteUpdate = false;
+    }
+  });
+  onValue(ref(db, 'aksvr/activity'), (snap) => {
+    const remote = snap.val();
+    if (remote) {
+      localStorage.setItem(ACTIVITY_KEY, JSON.stringify(remote));
+      if (activityVisible) renderActivity();
+    }
+  });
+}
+function pushToFirebase() {
+  if (!window.firebaseEnabled || isApplyingRemoteUpdate) return;
+  const { db, ref, set } = window.firebaseDB;
+  set(ref(db, 'aksvr/board'), data).catch(e => console.error(e));
+}
+function pushActivityToFirebase() {
+  if (!window.firebaseEnabled) return;
+  const { db, ref, set } = window.firebaseDB;
+  set(ref(db, 'aksvr/activity'), loadActivity()).catch(e => console.error(e));
+}
+
+/* Storage */
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return { ...JSON.parse(JSON.stringify(DEFAULT_DATA)), ...JSON.parse(raw) };
+  } catch(e) {}
+  return JSON.parse(JSON.stringify(DEFAULT_DATA));
+}
+function saveData() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  document.getElementById('lastUpdateLabel').textContent =
+    'LAST UPDATE: ' + new Date().toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'});
+  pushToFirebase();
+}
+
+/* Roster */
+function loadRoster() {
+  try {
+    const r = JSON.parse(localStorage.getItem(ROSTER_KEY));
+    if (r && r.length) return r;
+  } catch(e) {}
+  return [...DEFAULT_ROSTER];
+}
+function saveRoster(roster) {
+  localStorage.setItem(ROSTER_KEY, JSON.stringify(roster));
+}
+
+/* Known users (for switching login) */
+function loadKnownUsers() {
+  try { return JSON.parse(localStorage.getItem(KNOWN_USERS_KEY) || '[]'); }
+  catch(e) { return []; }
+}
+function addKnownUser(name, role) {
+  const users = loadKnownUsers();
+  const existing = users.findIndex(u => u.name === name);
+  if (existing >= 0) users[existing].role = role;
+  else users.unshift({ name, role });
+  localStorage.setItem(KNOWN_USERS_KEY, JSON.stringify(users.slice(0, 12)));
+}
+
+/* User flow */
+function checkUser() {
+  if (!currentUser) showNamePrompt();
+  else updateUserPill();
+}
+function updateUserPill() {
+  if (!currentUser) return;
+  document.getElementById('currentUser').textContent = currentUser.name.toUpperCase();
+  const tag = document.getElementById('userRoleTag');
+  tag.textContent = currentUser.role.toUpperCase();
+  tag.className = 'role-tag ' + currentUser.role;
+  document.getElementById('userPill').className = 'user-pill ' + currentUser.role;
+  const hint = document.getElementById('roleHint');
+  if (currentUser.role === 'packer') {
+    hint.className = 'role-hint packer';
+    hint.textContent = '✋ PACKER VIEW — Only Hunter/QC can tap +1. If you finished a package, grab them.';
+  } else {
+    hint.className = 'role-hint qc';
+    hint.textContent = '✓ ' + currentUser.role.toUpperCase() + ' — Tap +1 when verifying a package. Then tap who packed it.';
+  }
+}
+function showNamePrompt() {
+  const overlay = document.getElementById('nameOverlay');
+  const quickNames = document.getElementById('quickNames');
+  const users = loadKnownUsers();
+  quickNames.innerHTML = users.map(u =>
+    '<button class="quick-name" onclick="pickKnownUser(\'' + escapeHtml(u.name) + '\',\'' + u.role + '\')">' +
+    '<span class="role-mini ' + u.role + '">' + u.role.toUpperCase() + '</span>' +
+    escapeHtml(u.name) + '</button>'
+  ).join('');
+  document.getElementById('nameInput').value = '';
+  document.getElementById('rolePickerWrap').style.display = 'none';
+  pendingRole = null;
+  overlay.style.display = 'flex';
+  setTimeout(() => document.getElementById('nameInput').focus(), 100);
+  document.getElementById('nameInput').oninput = (e) => {
+    const v = e.target.value.trim();
+    const known = users.find(u => u.name.toLowerCase() === v.toLowerCase());
+    document.getElementById('rolePickerWrap').style.display = (v && !known) ? 'block' : 'none';
+  };
+}
+function selectRole(role) {
+  pendingRole = role;
+  document.querySelectorAll('.role-option').forEach(b => b.classList.remove('selected'));
+  document.querySelector('.role-option[data-role="' + role + '"]').classList.add('selected');
+}
+function pickKnownUser(name, role) {
+  currentUser = { name, role };
+  localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+  document.getElementById('nameOverlay').style.display = 'none';
+  updateUserPill();
+  logActivity('logged in');
+  render();
+}
+function saveName() {
+  const v = document.getElementById('nameInput').value.trim();
+  if (!v) {
+    if (currentUser) document.getElementById('nameOverlay').style.display = 'none';
+    return;
+  }
+  const users = loadKnownUsers();
+  const known = users.find(u => u.name.toLowerCase() === v.toLowerCase());
+  let role;
+  if (known) role = known.role;
+  else {
+    if (!pendingRole) { alert('Pick a role for this new name'); return; }
+    role = pendingRole;
+  }
+  currentUser = { name: v, role };
+  localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+  addKnownUser(v, role);
+  document.getElementById('nameOverlay').style.display = 'none';
+  updateUserPill();
+  logActivity('logged in as ' + role);
+  render();
+}
+function changeUser() { showNamePrompt(); }
+
+function isQC() { return currentUser && (currentUser.role === 'qc' || currentUser.role === 'manager'); }
+function isManager() { return currentUser && currentUser.role === 'manager'; }
+function denyAction(msg) {
+  const toast = document.getElementById('deniedToast');
+  document.getElementById('deniedMsg').textContent = msg || 'Only Hunter/QC can do this.';
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2500);
+}
+
+/* Activity log */
+function loadActivity() {
+  try { return JSON.parse(localStorage.getItem(ACTIVITY_KEY) || '[]'); }
+  catch(e) { return []; }
+}
+function logActivity(msg, flagged=false) {
+  const entries = loadActivity();
+  entries.unshift({
+    time: new Date().toISOString(),
+    user: currentUser ? currentUser.name : 'unknown',
+    role: currentUser ? currentUser.role : 'unknown',
+    msg, flagged
+  });
+  localStorage.setItem(ACTIVITY_KEY, JSON.stringify(entries.slice(0, 200)));
+  if (activityVisible) renderActivity();
+  pushActivityToFirebase();
+}
+function renderActivity() {
+  const entries = loadActivity().slice(0, 50);
+  const wrap = document.getElementById('activityLog');
+  if (entries.length === 0) {
+    wrap.innerHTML = '<div class="log-entry"><span class="log-msg" style="color:#666;">No activity yet.</span></div>';
+    return;
+  }
+  wrap.innerHTML = entries.map(e => {
+    const t = new Date(e.time);
+    const tStr = t.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:false});
+    return '<div class="log-entry' + (e.flagged ? ' flagged' : '') + '"><span class="log-time">' + tStr + '</span><span class="log-user">' + escapeHtml(e.user) + '</span><span class="log-msg">' + escapeHtml(e.msg) + (e.flagged ? ' ⚠' : '') + '</span></div>';
+  }).join('');
+}
+function toggleActivity() {
+  activityVisible = !activityVisible;
+  document.getElementById('activityPanel').style.display = activityVisible ? 'block' : 'none';
+  if (activityVisible) renderActivity();
+}
+
+/* Undo */
+function pushUndo(action) {
+  undoStack.push(action);
+  if (undoStack.length > 20) undoStack.shift();
+}
+function showUndo(msg) {
+  document.getElementById('undoMsg').textContent = msg;
+  document.getElementById('undoBar').classList.add('show');
+  if (undoTimer) clearTimeout(undoTimer);
+  undoTimer = setTimeout(() => document.getElementById('undoBar').classList.remove('show'), 5000);
+}
+function undoLast() {
+  const last = undoStack.pop();
+  if (!last) return;
+  last.undo();
+  document.getElementById('undoBar').classList.remove('show');
+  logActivity('undid last action');
+  render();
+}
+
+/* Clock */
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:false });
+  document.getElementById('dateLine').textContent = now.toLocaleDateString('en-US', { weekday:'long', month:'short', day:'numeric' });
+}
+
+/* Mode switcher */
+function setMode(mode) {
+  if (mode === 'full' && currentUser && currentUser.role === 'packer') { denyAction('Full board is QC/Manager only.'); return; }
+  if (mode === 'eod' && currentUser && currentUser.role === 'packer') { denyAction('End of day is QC/Manager only.'); return; }
+  data.mode = mode;
+  ['Quick','Full','EOD'].forEach(m => document.getElementById('mode' + m).classList.toggle('active', mode === m.toLowerCase()));
+  document.getElementById('quickMode').classList.toggle('active', mode === 'quick');
+  document.getElementById('fullMode').classList.toggle('active', mode === 'full');
+  document.getElementById('eodMode').classList.toggle('active', mode === 'eod');
+  saveData();
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ===== PACKER ATTRIBUTION POPUP ===== */
+function showPackerPopup(streamId, batchSize) {
+  pendingShipment = { streamId, batchSize };
+  const stream = data.streams.find(s => s.id === streamId);
+  document.getElementById('packerPopupSub').textContent =
+    `Logging ${batchSize} for ${stream ? stream.name : '—'} — who actually packed it?`;
+  const roster = loadRoster();
+  const grid = document.getElementById('packerGrid');
+  grid.innerHTML = roster.map(name =>
+    '<button class="packer-btn" onclick="confirmPacker(\'' + escapeHtml(name) + '\')">' + escapeHtml(name) + '</button>'
+  ).join('') + '<button class="packer-btn other" onclick="showPackerOther()">+ OTHER NAME</button>';
+  const other = document.getElementById('packerOther');
+  other.classList.remove('show');
+  other.value = '';
+  other.onkeypress = (e) => {
+    if (e.key === 'Enter' && other.value.trim()) {
+      confirmPacker(other.value.trim());
+    }
+  };
+  document.getElementById('packerPopup').classList.add('show');
+}
+function showPackerOther() {
+  document.getElementById('packerOther').classList.add('show');
+  document.getElementById('packerOther').focus();
+}
+function confirmPacker(packerName) {
+  if (!pendingShipment) return;
+  const { streamId, batchSize } = pendingShipment;
+  const stream = data.streams.find(s => s.id === streamId);
+  if (!stream) return;
+
+  // Record shipment
+  stream.completed += batchSize;
+  data.packerStats[packerName] = data.packerStats[packerName] || {};
+  data.packerStats[packerName][streamId] = (data.packerStats[packerName][streamId] || 0) + batchSize;
+
+  // Add this packer to roster if new
+  const roster = loadRoster();
+  if (!roster.includes(packerName)) {
+    roster.push(packerName);
+    saveRoster(roster);
+  }
+
+  logActivity(`shipped +${batchSize} on ${stream.name} — packed by ${packerName}`);
+  pushUndo({
+    undo: () => {
+      stream.completed = Math.max(0, stream.completed - batchSize);
+      if (data.packerStats[packerName] && data.packerStats[packerName][streamId]) {
+        data.packerStats[packerName][streamId] = Math.max(0, data.packerStats[packerName][streamId] - batchSize);
+      }
+    }
+  });
+  showUndo(`+${batchSize} ${stream.name} → packed by ${packerName} (now ${stream.completed})`);
+
+  flashButton(streamId);
+  document.getElementById('packerPopup').classList.remove('show');
+  pendingShipment = null;
+  render();
+}
+function cancelPackerPopup() {
+  document.getElementById('packerPopup').classList.remove('show');
+  pendingShipment = null;
+}
+
+/* ===== RENDER ===== */
+function render() {
+  renderQuickMode();
+  renderPackerCards();
+  renderFullMode();
+  renderEOD();
+  renderSummary();
+  renderErrorLog();
+  renderSetAsideLog();
+  saveData();
+}
+
+function renderErrorLog() {
+  const container = document.getElementById('errorLogBody');
+  if (!container) return;
+  const log = (data.errorLog || []).slice(0, 20);
+
+  if (log.length === 0) {
+    container.innerHTML = '<div style="padding:12px; color:#666; font-size:11px; text-align:center; font-style:italic;">No errors logged today. ✓</div>';
+    return;
+  }
+
+  container.innerHTML = log.map(e => {
+    const t = new Date(e.timestamp);
+    const tStr = t.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:true});
+    return '<div class="error-row ' + e.type + '">' +
+      '<div class="error-row-head">' +
+        '<div>' +
+          '<span class="error-tag ' + e.type + '">' + (e.type === 'caught' ? '✓ CAUGHT' : '⚠ SHIPPED') + '</span>' +
+          (e.orderNumber ? ' <span class="error-order">#' + escapeHtml(e.orderNumber) + '</span>' : '') +
+        '</div>' +
+        '<span class="error-time">' + tStr + '</span>' +
+      '</div>' +
+      '<div class="error-meta">' +
+        (e.streamName ? '<strong>' + escapeHtml(e.streamName) + '</strong>' : '') +
+        (e.madeBy ? ' · made by <strong>' + escapeHtml(e.madeBy) + '</strong>' : '') +
+        (e.type === 'caught' && e.caughtBy ? ' · saved by <strong>' + escapeHtml(e.caughtBy) + '</strong>' : '') +
+        (e.timeToFix ? ' · ' + escapeHtml(e.timeToFix) + ' to fix' : '') +
+      '</div>' +
+      (e.note ? '<div class="error-note">"' + escapeHtml(e.note) + '"</div>' : '') +
+    '</div>';
+  }).join('');
+}
+
+function renderSetAsideLog() {
+  const container = document.getElementById('setAsideBody');
+  if (!container) return;
+  const log = (data.setAsideLog || []).slice(0, 20);
+
+  if (log.length === 0) {
+    container.innerHTML = '<div style="padding:12px; color:#666; font-size:11px; text-align:center; font-style:italic;">No packages set aside today.</div>';
+    return;
+  }
+
+  container.innerHTML = log.map((s, idx) => {
+    const t = new Date(s.timestamp);
+    const tStr = t.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:true});
+    return '<div class="setaside-row ' + (s.resolved ? 'resolved' : '') + '">' +
+      '<div class="setaside-head">' +
+        '<div>' +
+          (s.orderNumber ? '<span class="setaside-order">#' + escapeHtml(s.orderNumber) + '</span>' : '<span class="setaside-order" style="color:#666;">no order #</span>') +
+          (s.resolved ? ' <span style="font-size:9px; color:#00d97e; letter-spacing:0.15em;">✓ RESOLVED</span>' : '') +
+        '</div>' +
+        '<span class="error-time">' + tStr + '</span>' +
+      '</div>' +
+      '<div class="error-meta">' +
+        (s.streamName ? '<strong>' + escapeHtml(s.streamName) + '</strong>' : '') +
+        (s.packedBy ? ' · packed by <strong>' + escapeHtml(s.packedBy) + '</strong>' : '') +
+      '</div>' +
+      (s.reason ? '<div class="error-note">"' + escapeHtml(s.reason) + '"</div>' : '') +
+      (!s.resolved ? '<div class="setaside-actions"><button class="setaside-btn resolve" onclick="resolveSetAside(' + idx + ')">✓ MARK RESOLVED</button></div>' : '') +
+    '</div>';
+  }).join('');
+}
+
+function resolveSetAside(idx) {
+  if (!isQC()) { denyAction(); return; }
+  if (!data.setAsideLog || !data.setAsideLog[idx]) return;
+  data.setAsideLog[idx].resolved = true;
+  data.setAsideLog[idx].resolvedAt = new Date().toISOString();
+  logActivity('resolved set-aside package' + (data.setAsideLog[idx].orderNumber ? ' #' + data.setAsideLog[idx].orderNumber : ''));
+  render();
+}
+
+function renderPackerCards() {
+  const container = document.getElementById('packerCardsContainer');
+  const titleEl = document.getElementById('packerSectionTitle');
+  const subEl = document.getElementById('packerSectionSub');
+  if (!container) return;
+
+  const packers = getPackerTotals();
+  const totalCompleted = data.streams.reduce((s, st) => s + st.completed, 0);
+
+  // PACKER role: show ONLY their own card, big format
+  if (currentUser && currentUser.role === 'packer') {
+    const me = packers.find(p =>
+      p.name.toLowerCase() === currentUser.name.toLowerCase()
+    );
+    titleEl.textContent = '▸ YOUR PERFORMANCE TODAY';
+    subEl.textContent = 'this is just you · only you see this';
+
+    if (!me) {
+      container.innerHTML = '<div class="my-card-large"><span class="me-tag-large">YOU</span><div class="my-name">' + escapeHtml(currentUser.name.toUpperCase()) + '</div><div class="my-shipped">0</div><div class="my-sublabel">SHIPPED TODAY · no shipments yet</div></div>';
+      return;
+    }
+
+    // Get error rate context
+    const caughtClass = me.errorsCaught === 0 ? 'good' : 'warn';
+    const shippedClass = me.errorsShipped === 0 ? 'good' : 'bad';
+    const setAsideClass = me.setAside === 0 ? 'good' : 'warn';
+
+    const streamBreakdown = data.streams
+      .map(s => {
+        const n = (me.byStream && me.byStream[s.id]) || 0;
+        return n > 0 ? '<strong>' + escapeHtml(s.name) + ':</strong> ' + n : null;
+      })
+      .filter(Boolean)
+      .join(' · ');
+
+    container.innerHTML =
+      '<div class="my-card-large">' +
+        '<span class="me-tag-large">▸ YOU</span>' +
+        '<div class="my-name">' + escapeHtml(currentUser.name.toUpperCase()) + '</div>' +
+        '<div class="my-shipped">' + me.total + '</div>' +
+        '<div class="my-sublabel">SHIPPED TODAY · ' + me.pct + '% of room total</div>' +
+        (streamBreakdown ? '<div style="font-size:11px; color:#aaa; margin-bottom:14px;">' + streamBreakdown + '</div>' : '') +
+        '<div class="my-mini-stats">' +
+          '<div><div class="my-mini-stat-label">CAUGHT</div><div class="my-mini-stat-value ' + caughtClass + '">' + me.errorsCaught + '</div></div>' +
+          '<div><div class="my-mini-stat-label">SHIPPED ✗</div><div class="my-mini-stat-value ' + shippedClass + '">' + me.errorsShipped + '</div></div>' +
+          '<div><div class="my-mini-stat-label">SET ASIDE</div><div class="my-mini-stat-value ' + setAsideClass + '">' + me.setAside + '</div></div>' +
+        '</div>' +
+      '</div>';
+    return;
+  }
+
+  // QC / MANAGER: show all packer cards
+  titleEl.textContent = '▸ TODAY\'S PACKER PERFORMANCE';
+  subEl.textContent = packers.length + ' packers · live · QC/Manager only';
+
+  // Filter to packers with activity, sort by volume desc
+  const active = packers.filter(p => p.total > 0 || p.errors > 0 || p.reopens > 0);
+  const dormant = packers.filter(p => p.total === 0 && p.errors === 0 && p.reopens === 0);
+  const display = [...active, ...dormant];
+
+  if (display.length === 0) {
+    container.innerHTML = '<div style="background:#0d0d0d; border:1px solid #2a2a2a; padding:24px; text-align:center; color:#666; font-size:12px;">No packers in the roster yet. Click MANAGE PACKERS in Full Board to add names.</div>';
+    return;
+  }
+
+  const leadingTotal = active.length > 0 ? active[0].total : 0;
+
+  container.innerHTML = '<div class="packer-cards-grid">' + display.map(p => {
+    const isMe = currentUser && p.name.toLowerCase() === currentUser.name.toLowerCase();
+    const isLeading = p.total > 0 && p.total === leadingTotal && active.length > 1;
+    const hasData = p.total > 0 || p.errors > 0 || p.reopens > 0 || p.errorsCaught > 0 || p.errorsShipped > 0 || p.setAside > 0;
+
+    // New classification: errors caught (system worked) vs shipped (escaped) vs set aside
+    const caughtClass = p.errorsCaught === 0 ? 'good' : 'warn';
+    const shippedClass = p.errorsShipped === 0 ? 'good' : 'bad';
+    const setAsideClass = p.setAside === 0 ? 'good' : 'warn';
+
+    const streamBreakdown = data.streams
+      .map(s => {
+        const n = (p.byStream && p.byStream[s.id]) || 0;
+        return n > 0 ? '<strong>' + escapeHtml(s.name) + ':</strong> ' + n : null;
+      })
+      .filter(Boolean)
+      .join(' · ');
+
+    return '<div class="packer-card ' + (isMe ? 'is-me' : '') + ' ' + (isLeading ? 'is-leading' : '') + ' ' + (!hasData ? 'no-data' : '') + '">' +
+      (isMe ? '<span class="me-tag">YOU</span>' : '') +
+      '<div class="packer-card-name">' + escapeHtml(p.name) + '</div>' +
+      '<div class="packer-card-role">' + (isLeading ? 'LEADING · ' : '') + (hasData ? p.pct + '% OF DAY' : 'NO ACTIVITY YET') + '</div>' +
+      '<div class="packer-card-main">' +
+        '<div class="packer-card-big">' + p.total + '</div>' +
+        '<div style="font-size:10px; color:#888; letter-spacing:0.15em;">SHIPPED</div>' +
+      '</div>' +
+      '<div class="packer-card-pct-bar"><div class="packer-card-pct-fill" style="width:' + p.pct + '%;"></div></div>' +
+      '<div class="packer-card-stats" style="margin-top:14px;">' +
+        '<div class="packer-card-stat"><div class="packer-card-stat-label" style="font-size:7px;">CAUGHT</div><div class="packer-card-stat-value ' + caughtClass + '">' + p.errorsCaught + '</div></div>' +
+        '<div class="packer-card-stat"><div class="packer-card-stat-label" style="font-size:7px;">SHIPPED✗</div><div class="packer-card-stat-value ' + shippedClass + '">' + p.errorsShipped + '</div></div>' +
+        '<div class="packer-card-stat"><div class="packer-card-stat-label" style="font-size:7px;">SET ASIDE</div><div class="packer-card-stat-value ' + setAsideClass + '">' + p.setAside + '</div></div>' +
+      '</div>' +
+      (p.errorsSavedBy > 0 ? '<div style="margin-top:6px; font-size:10px; color:#00d97e; text-align:center;">✓ Saved ' + p.errorsSavedBy + ' error' + (p.errorsSavedBy !== 1 ? 's' : '') + ' during QC</div>' : '') +
+      (streamBreakdown ? '<div class="packer-card-streams">' + streamBreakdown + '</div>' : '') +
+    '</div>';
+  }).join('') + '</div>';
+}
+
+function isStreamReadyToBeCaughtUp(stream) {
+  // A stream is "ready" to be marked caught up when all stages are at 0
+  if (!stream.stages) return false;
+  return stream.stages.every(stage => (stage.orders || 0) === 0);
+}
+
+function renderQuickMode() {
+  const locked = !isQC();
+  const grid = document.getElementById('quickCounters');
+  grid.innerHTML = data.streams.map(stream => {
+    const ready = isStreamReadyToBeCaughtUp(stream);
+    const isCaughtUp = stream.caughtUp === true;
+
+    // Caught-up button styling
+    let caughtUpBtnClass = 'mark-caught-up-btn';
+    let caughtUpBtnText = 'STAGES NOT CLEAR YET';
+    let caughtUpBtnDisabled = 'disabled';
+    let caughtUpBtnHandler = '';
+
+    if (isCaughtUp) {
+      caughtUpBtnClass += ' is-caught-up';
+      caughtUpBtnText = '✓ CAUGHT UP — TAP TO UNMARK';
+      caughtUpBtnDisabled = '';
+      caughtUpBtnHandler = 'onclick="unmarkCaughtUp(\'' + stream.id + '\')"';
+    } else if (ready && !locked) {
+      caughtUpBtnClass += ' ready';
+      caughtUpBtnText = '✓ MARK CAUGHT UP';
+      caughtUpBtnDisabled = '';
+      caughtUpBtnHandler = 'onclick="markCaughtUp(\'' + stream.id + '\')"';
+    } else if (ready && locked) {
+      caughtUpBtnText = 'LOOKS CLEAR — GRAB HUNTER';
+    }
+
+    const cardClass = 'big-counter ' +
+      (stream.active ? '' : 'paused') + ' ' +
+      (locked ? 'locked' : '') + ' ' +
+      (isCaughtUp ? 'caught-up' : '');
+
+    return '<div class="' + cardClass + '">' +
+      '<div class="big-counter-header">' +
+        '<div class="big-counter-name">' +
+          '<span class="live-dot ' + (stream.active ? '' : 'paused') + '"></span>' +
+          escapeHtml(stream.name) +
+          (isCaughtUp ? '<span class="caught-up-badge">✓ CAUGHT UP</span>' : '') +
+        '</div>' +
+        (isQC() ? '<button class="btn btn-sm" onclick="toggleStream(\'' + stream.id + '\')">' + (stream.active ? 'PAUSE' : 'RESUME') + '</button>' : '') +
+      '</div>' +
+      '<div class="counter-body">' +
+        '<div class="counter-label">SHIPPED TODAY</div>' +
+        '<div class="counter-number">' + stream.completed + '</div>' +
+      '</div>' +
+      '<button class="big-button" id="bigBtn_' + stream.id + '" onclick="completeOne(\'' + stream.id + '\')">' + (locked ? '🔒 QC ONLY' : '+1 SHIPPED') + '</button>' +
+      '<div class="counter-actions counter-actions-4">' +
+        '<button class="counter-action" onclick="completeMultiple(\'' + stream.id + '\')">+ MULTIPLE</button>' +
+        '<button class="counter-action caught" onclick="logErrorCaught(\'' + stream.id + '\')">✓ ERROR CAUGHT</button>' +
+        '<button class="counter-action error" onclick="logErrorShipped(\'' + stream.id + '\')">⚠ ERROR SHIPPED</button>' +
+        '<button class="counter-action setaside" onclick="logSetAside(\'' + stream.id + '\')">⊘ SET ASIDE</button>' +
+      '</div>' +
+      '<button class="' + caughtUpBtnClass + '" ' + caughtUpBtnDisabled + ' ' + caughtUpBtnHandler + '>' + caughtUpBtnText + '</button>' +
+    '</div>';
+  }).join('');
+}
+
+function markCaughtUp(streamId) {
+  if (!isQC()) { denyAction('Only Hunter/QC can mark caught up.'); return; }
+  const stream = data.streams.find(s => s.id === streamId);
+  if (!stream) return;
+  if (!isStreamReadyToBeCaughtUp(stream)) {
+    denyAction('Stages still have work in them. Clear the stages first.');
+    return;
+  }
+  stream.caughtUp = true;
+  logActivity('marked ' + stream.name + ' CAUGHT UP');
+  showToast('✓ ' + stream.name + ' marked caught up');
+  render();
+}
+
+function unmarkCaughtUp(streamId) {
+  if (!isQC()) { denyAction(); return; }
+  const stream = data.streams.find(s => s.id === streamId);
+  if (!stream) return;
+  stream.caughtUp = false;
+  logActivity('unmarked ' + stream.name + ' caught up');
+  render();
+}
+
+function showToast(message) {
+  // Reuse the undo bar styling for toast messages
+  document.getElementById('undoMsg').textContent = message;
+  document.getElementById('undoBar').classList.add('show');
+  if (window._toastTimer) clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => document.getElementById('undoBar').classList.remove('show'), 2500);
+}
+
+function getPackerTotals() {
+  // returns sorted array: [{name, total, byStream: {streamId: count}, errors, reopens, pct}]
+  const totalCompleted = data.streams.reduce((s, st) => s + st.completed, 0);
+  const packers = {};
+
+  // Initialize from roster so even 0-count packers show up
+  loadRoster().forEach(name => {
+    packers[name] = { name, total: 0, byStream: {}, errors: 0, reopens: 0,
+      errorsCaught: 0, errorsShipped: 0, errorsSavedBy: 0, setAside: 0 };
+  });
+
+  // Sum from packerStats
+  Object.keys(data.packerStats || {}).forEach(name => {
+    if (!packers[name]) packers[name] = { name, total: 0, byStream: {}, errors: 0, reopens: 0,
+      errorsCaught: 0, errorsShipped: 0, errorsSavedBy: 0, setAside: 0 };
+    Object.keys(data.packerStats[name] || {}).forEach(streamId => {
+      const n = data.packerStats[name][streamId] || 0;
+      packers[name].byStream[streamId] = n;
+      packers[name].total += n;
+    });
+  });
+
+  Object.keys(data.packerErrors || {}).forEach(name => {
+    if (!packers[name]) packers[name] = { name, total: 0, byStream: {}, errors: 0, reopens: 0,
+      errorsCaught: 0, errorsShipped: 0, errorsSavedBy: 0, setAside: 0 };
+    packers[name].errors = data.packerErrors[name] || 0;
+  });
+  Object.keys(data.packerReopens || {}).forEach(name => {
+    if (!packers[name]) packers[name] = { name, total: 0, byStream: {}, errors: 0, reopens: 0,
+      errorsCaught: 0, errorsShipped: 0, errorsSavedBy: 0, setAside: 0 };
+    packers[name].reopens = data.packerReopens[name] || 0;
+  });
+  Object.keys(data.packerErrorsCaught || {}).forEach(name => {
+    if (!packers[name]) packers[name] = { name, total: 0, byStream: {}, errors: 0, reopens: 0,
+      errorsCaught: 0, errorsShipped: 0, errorsSavedBy: 0, setAside: 0 };
+    packers[name].errorsCaught = data.packerErrorsCaught[name] || 0;
+  });
+  Object.keys(data.packerErrorsShipped || {}).forEach(name => {
+    if (!packers[name]) packers[name] = { name, total: 0, byStream: {}, errors: 0, reopens: 0,
+      errorsCaught: 0, errorsShipped: 0, errorsSavedBy: 0, setAside: 0 };
+    packers[name].errorsShipped = data.packerErrorsShipped[name] || 0;
+  });
+  Object.keys(data.packerErrorsSavedBy || {}).forEach(name => {
+    if (!packers[name]) packers[name] = { name, total: 0, byStream: {}, errors: 0, reopens: 0,
+      errorsCaught: 0, errorsShipped: 0, errorsSavedBy: 0, setAside: 0 };
+    packers[name].errorsSavedBy = data.packerErrorsSavedBy[name] || 0;
+  });
+  Object.keys(data.packerSetAside || {}).forEach(name => {
+    if (!packers[name]) packers[name] = { name, total: 0, byStream: {}, errors: 0, reopens: 0,
+      errorsCaught: 0, errorsShipped: 0, errorsSavedBy: 0, setAside: 0 };
+    packers[name].setAside = data.packerSetAside[name] || 0;
+  });
+
+  // Compute percentages
+  const arr = Object.values(packers);
+  arr.forEach(p => p.pct = totalCompleted > 0 ? Math.round(p.total / totalCompleted * 100) : 0);
+  arr.sort((a, b) => b.total - a.total);
+  return arr;
+}
+
+function renderFullMode() {
+  // Stream detail
+  const dStreams = document.getElementById('detailStreams');
+  if (dStreams) {
+    dStreams.innerHTML = data.streams.map(stream => {
+      const stagesHtml = stream.stages.map(st => {
+        const isHigh = st.orders >= 15;
+        return '<div class="stage-line">' +
+          '<div><div class="stage-name-label">' + escapeHtml(st.name) + '</div>' +
+          '<div class="stage-meta">' + (escapeHtml(st.assigned) || '—') + (st.notes ? ' · ' + escapeHtml(st.notes) : '') + '</div></div>' +
+          '<button class="icon-btn" onclick="adjustStage(\'' + stream.id + '\',\'' + st.id + '\',-1)">−</button>' +
+          '<div class="stage-count ' + (isHigh ? 'high' : '') + '">' + st.orders + '</div>' +
+          '<button class="icon-btn" onclick="adjustStage(\'' + stream.id + '\',\'' + st.id + '\',1)">+</button>' +
+        '</div>';
+      }).join('');
+      return '<div class="stream-detail" style="' + (stream.active ? '' : 'opacity:0.45;') + '">' +
+        '<div class="stream-detail-header">' +
+          '<div class="stream-detail-name">' + escapeHtml(stream.name) + ' <span style="font-size:10px; color:' + (stream.active ? '#00d97e' : '#666') + ';">' + (stream.active ? '● LIVE' : '◌ PAUSED') + '</span></div>' +
+          '<div style="display:flex; gap:6px;">' +
+            '<button class="btn btn-sm" onclick="editStreamDetails(\'' + stream.id + '\')">✎ EDIT</button>' +
+            '<button class="btn btn-sm btn-danger" onclick="removeStream(\'' + stream.id + '\')">×</button>' +
+          '</div></div>' +
+        '<div class="stream-detail-stages">' + stagesHtml + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // Per-packer scoreboard
+  const sb = document.getElementById('scoreboardBody');
+  if (sb) {
+    const packers = getPackerTotals();
+    if (packers.every(p => p.total === 0)) {
+      sb.innerHTML = '<div style="color:#666; font-size:12px; padding:8px; text-align:center; font-style:italic;">No shipments logged yet today.<br>Tap +1 SHIPPED on a stream to start tracking.</div>';
+    } else {
+      sb.innerHTML = packers.map(p => {
+        return '<div class="packer-row">' +
+          '<div>' +
+            '<div class="pname">' + escapeHtml(p.name) + '</div>' +
+            (p.errors || p.reopens ? '<div style="font-size:10px; color:#ff8888; margin-top:2px;">' + (p.errors ? p.errors + ' err' : '') + (p.errors && p.reopens ? ' · ' : '') + (p.reopens ? p.reopens + ' reopen' : '') + '</div>' : '') +
+          '</div>' +
+          '<div class="pstat"><strong>' + p.total + '</strong><div style="font-size:9px; color:#666;">shipped</div></div>' +
+          '<div class="pstat" style="color:#ffb800; font-weight:700;">' + p.pct + '%</div>' +
+          '<div class="pct-bar"><div class="pct-fill" style="width:' + p.pct + '%;"></div></div>' +
+        '</div>';
+      }).join('');
+    }
+  }
+
+  // Goals
+  const gPanel = document.getElementById('goalsPanel');
+  if (gPanel) {
+    const goals = [
+      { key: 'ordersCompleted', label: 'Orders Completed', g: data.goals.ordersCompleted, locked: true },
+      { key: 'errorCount', label: 'Error Count', g: data.goals.errorCount, prefix: '<' },
+      { key: 'overnightBacklog', label: 'Overnight Backlog', g: data.goals.overnightBacklog, suffix: ' max' },
+      { key: 'reopenedPackages', label: 'Reopened Packages', g: data.goals.reopenedPackages },
+    ];
+    gPanel.innerHTML = goals.map(({ key, label, g, prefix='', suffix='', locked }) => {
+      let status;
+      if (g.lowerIsBetter) status = g.current <= g.target ? 'good' : 'bad';
+      else status = g.current >= g.target ? 'good' : 'pending';
+      const counterHtml = locked
+        ? '<span style="color:#666; font-size:10px; margin-right:8px;">auto</span><div class="goal-num ' + status + '">' + g.current + '</div>'
+        : '<button class="icon-btn" onclick="adjustGoal(\'' + key + '\',-1)">−</button><div class="goal-num ' + status + '">' + g.current + '</div><button class="icon-btn" onclick="adjustGoal(\'' + key + '\',1)">+</button>';
+      return '<div class="goal-line">' +
+        '<div><div class="goal-name">' + label + '</div><div class="goal-target-label">TARGET: ' + prefix + g.target + suffix + '</div></div>' +
+        '<div class="goal-counter">' + counterHtml + '</div>' +
+        '<button class="icon-btn" onclick="editGoalTarget(\'' + key + '\')">✎</button>' +
+      '</div>';
+    }).join('');
+  }
+
+  const m = document.getElementById('morningNoteDisplay');
+  if (m) {
+    m.className = 'note-display' + (data.morningNote ? '' : ' empty');
+    m.textContent = data.morningNote || 'No morning brief yet. Click ✎ to add.';
+  }
+}
+
+function renderEOD() {
+  const totalCompleted = data.streams.reduce((s, st) => s + st.completed, 0);
+  const totalBacklog = data.streams.filter(s => s.active).reduce((sum, s) => sum + s.stages.reduce((a, st) => a + st.orders, 0), 0);
+
+  document.getElementById('reconcileBoard').textContent = totalCompleted;
+  document.getElementById('eodShipped').textContent = totalCompleted;
+  document.getElementById('eodGoal').textContent = data.goals.ordersCompleted.target;
+  document.getElementById('eodBacklog').textContent = totalBacklog;
+  document.getElementById('eodErrors').textContent = data.goals.errorCount.current;
+  document.getElementById('eodReopens').textContent = data.goals.reopenedPackages.current;
+  document.getElementById('overnightDisplay').textContent = data.goals.overnightBacklog.current;
+
+  // Per-stream
+  document.getElementById('eodPerStream').innerHTML = data.streams.map(s =>
+    '<div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #1a1a1a;">' +
+    '<span>' + escapeHtml(s.name) + (s.active ? '' : ' <span style="color:#666;">(paused)</span>') + '</span>' +
+    '<strong style="color:#00d97e;">' + s.completed + '</strong></div>'
+  ).join('');
+
+  // EOD per-packer scoreboard
+  const eodSb = document.getElementById('eodScoreboard');
+  const packers = getPackerTotals();
+  if (packers.every(p => p.total === 0)) {
+    eodSb.innerHTML = '<div style="color:#666; font-size:12px; padding:8px; text-align:center; font-style:italic;">No shipments tracked yet.</div>';
+  } else {
+    eodSb.innerHTML = packers.map(p => {
+      const streamBreakdown = data.streams.map(s => {
+        const n = (p.byStream && p.byStream[s.id]) || 0;
+        return n > 0 ? escapeHtml(s.name) + ': ' + n : null;
+      }).filter(Boolean).join(' · ');
+      return '<div class="packer-row">' +
+        '<div>' +
+          '<div class="pname">' + escapeHtml(p.name) + '</div>' +
+          (streamBreakdown ? '<div style="font-size:10px; color:#888; margin-top:3px;">' + streamBreakdown + '</div>' : '') +
+          (p.errors || p.reopens ? '<div style="font-size:10px; color:#ff8888; margin-top:2px;">' + (p.errors ? p.errors + ' err' : '') + (p.errors && p.reopens ? ' · ' : '') + (p.reopens ? p.reopens + ' reopen' : '') + '</div>' : '') +
+        '</div>' +
+        '<div class="pstat"><strong>' + p.total + '</strong><div style="font-size:9px; color:#666;">shipped</div></div>' +
+        '<div class="pstat" style="color:#ffb800; font-weight:700;">' + p.pct + '%</div>' +
+        '<div class="pct-bar"><div class="pct-fill" style="width:' + p.pct + '%;"></div></div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // EOD note
+  const e2 = document.getElementById('eodNoteDisplay2');
+  e2.className = 'note-display' + (data.endOfDayNote ? '' : ' empty');
+  e2.textContent = data.endOfDayNote || 'No end-of-day recap yet. Click ✎ to add.';
+
+  // Reconcile
+  const reconcileInput = document.getElementById('reconcileActual');
+  if (data.reconcileActual && reconcileInput.value !== String(data.reconcileActual)) {
+    reconcileInput.value = data.reconcileActual;
+  }
+  updateReconcile();
+}
+
+function updateReconcile() {
+  const totalCompleted = data.streams.reduce((s, st) => s + st.completed, 0);
+  const actualInput = document.getElementById('reconcileActual').value;
+  const actual = parseInt(actualInput);
+  const diffEl = document.getElementById('reconcileDiff');
+  const resultEl = document.getElementById('reconcileResult');
+  data.reconcileActual = actualInput;
+
+  if (isNaN(actual)) {
+    diffEl.textContent = '—';
+    resultEl.className = 'reconcile-result pending';
+    resultEl.textContent = 'Enter actual shipping count to check';
+    return;
+  }
+  const diff = totalCompleted - actual;
+  diffEl.textContent = (diff > 0 ? '+' : '') + diff;
+  diffEl.style.color = diff === 0 ? '#00d97e' : '#ff4444';
+  if (diff === 0) {
+    resultEl.className = 'reconcile-result match';
+    resultEl.textContent = '✓ MATCH — board and shipping software agree';
+  } else if (Math.abs(diff) <= 2) {
+    resultEl.className = 'reconcile-result pending';
+    resultEl.textContent = '⚠ MINOR DISCREPANCY (' + Math.abs(diff) + ')';
+  } else {
+    resultEl.className = 'reconcile-result mismatch';
+    resultEl.textContent = diff > 0 ? '✗ BOARD OVER BY ' + diff : '✗ BOARD UNDER BY ' + Math.abs(diff);
+  }
+  saveData();
+}
+
+function renderSummary() {
+  const totalCompleted = data.streams.reduce((s, st) => s + st.completed, 0);
+  const totalBacklog = data.streams.filter(s => s.active).reduce((sum, s) => sum + s.stages.reduce((a, st) => a + st.orders, 0), 0);
+
+  data.goals.ordersCompleted.current = totalCompleted;
+  document.getElementById('sumCompleted').textContent = totalCompleted;
+
+  // CAUGHT UP TRACKER
+  const activeStreams = data.streams.filter(s => s.active);
+  const caughtUpCount = activeStreams.filter(s => s.caughtUp === true).length;
+  const totalActive = activeStreams.length;
+  const allCaughtUp = totalActive > 0 && caughtUpCount === totalActive;
+
+  const caughtUpEl = document.getElementById('sumCaughtUp');
+  const caughtUpSubEl = document.getElementById('sumCaughtUpSub');
+  const caughtUpCell = document.getElementById('caughtUpCell');
+  if (caughtUpEl) {
+    caughtUpEl.textContent = caughtUpCount + '/' + totalActive;
+    if (allCaughtUp) {
+      caughtUpCell.classList.add('caught-up');
+      caughtUpSubEl.textContent = '✓ DAILY GOAL HIT';
+    } else {
+      caughtUpCell.classList.remove('caught-up');
+      const remaining = totalActive - caughtUpCount;
+      caughtUpSubEl.textContent = remaining + ' stream' + (remaining !== 1 ? 's' : '') + ' to go';
+    }
+  }
+
+  // CELEBRATION BANNER
+  const banner = document.getElementById('caughtUpBanner');
+  if (banner) {
+    if (allCaughtUp && totalActive > 0) {
+      banner.style.display = 'block';
+      document.getElementById('bannerSub').textContent =
+        totalActive + ' streams clear · ' + totalCompleted + ' shipped today · nothing left in the pipeline';
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+
+  document.getElementById('sumBacklog').textContent = totalBacklog;
+  document.getElementById('sumBacklog').style.color = totalBacklog > 40 ? '#ff4444' : (totalBacklog === 0 ? '#00d97e' : '#ffb800');
+  document.getElementById('sumErrors').textContent = data.goals.errorCount.current;
+  document.getElementById('sumErrors').style.color = data.goals.errorCount.current <= data.goals.errorCount.target ? '#00d97e' : '#ff4444';
+  document.getElementById('sumErrorTarget').textContent = data.goals.errorCount.target;
+
+  // Keep the Full Board progress bar working (still based on order target if present)
+  const target = data.goals.ordersCompleted.target;
+  const pct = target > 0 ? Math.min(100, Math.round(totalCompleted / target * 100)) : 0;
+  if (document.getElementById('progressPct')) {
+    document.getElementById('progressPct').textContent = pct + '%';
+    document.getElementById('progressPct').style.color = pct >= 100 ? '#00d97e' : '#ffb800';
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressFill').className = 'progress-fill' + (pct >= 100 ? ' done' : '');
+    document.getElementById('progressDone').textContent = totalCompleted + ' done';
+    document.getElementById('progressTodo').textContent = Math.max(0, target - totalCompleted) + ' to go';
+  }
+}
+
+/* ===== ACTIONS ===== */
+function completeOne(streamId) {
+  if (!currentUser) { showNamePrompt(); return; }
+  if (!isQC()) {
+    denyAction('Only Hunter/QC can log shipped packages. Grab them.');
+    logActivity('TRIED to tap +1 but role is packer', true);
+    return;
+  }
+  const stream = data.streams.find(s => s.id === streamId);
+  if (!stream || !stream.active) return;
+  // POPUP for who packed it
+  showPackerPopup(streamId, 1);
+}
+
+function completeMultiple(streamId) {
+  if (!currentUser) { showNamePrompt(); return; }
+  if (!isQC()) { denyAction(); return; }
+  const stream = data.streams.find(s => s.id === streamId);
+  if (!stream) return;
+  openModal({
+    title: 'Add multiple to ' + stream.name,
+    fields: [{ label: 'How many shipped?', name: 'count', type: 'number', value: '5' }],
+    onSubmit: (vals) => {
+      const n = parseInt(vals.count);
+      if (isNaN(n) || n < 1) return;
+      showPackerPopup(streamId, n);
+    }
+  });
+}
+
+function buildPackerOptions(currentValue) {
+  // Returns a select dropdown HTML for packer selection
+  const roster = loadRoster();
+  const opts = ['<option value="">— pick name —</option>'];
+  roster.forEach(name => {
+    const sel = (currentValue === name) ? ' selected' : '';
+    opts.push('<option value="' + escapeHtml(name) + '"' + sel + '>' + escapeHtml(name) + '</option>');
+  });
+  return opts.join('');
+}
+
+function logErrorCaught(streamId) {
+  if (!currentUser) { showNamePrompt(); return; }
+  if (!isQC()) { denyAction(); return; }
+  const stream = data.streams.find(s => s.id === streamId);
+  if (!stream) return;
+
+  openModal({
+    title: '✓ Error CAUGHT on ' + stream.name,
+    fields: [
+      { label: 'Order number (helps find it later)', name: 'orderNumber', type: 'text', placeholder: 'e.g. #1234 or last 4 digits' },
+      { label: 'Who made the error?', name: 'madeBy', type: 'select', options: loadRoster(), placeholder: 'pick from roster' },
+      { label: 'Who caught it? (defaults to you)', name: 'caughtBy', type: 'text', value: currentUser.name },
+      { label: 'What was the error?', name: 'note', type: 'text', placeholder: 'wrong slab, bad label, wrong address, etc.' },
+      { label: 'Time to fix', name: 'timeToFix', type: 'select-time' }
+    ],
+    onSubmit: (vals) => {
+      const madeBy = (vals.madeBy || '').trim();
+      const caughtBy = (vals.caughtBy || '').trim() || currentUser.name;
+      const orderNumber = (vals.orderNumber || '').trim();
+      const note = (vals.note || '').trim();
+      const timeToFix = vals.timeToFix || '';
+
+      // Track in detailed error log
+      data.errorLog = data.errorLog || [];
+      data.errorLog.unshift({
+        type: 'caught',
+        streamId,
+        streamName: stream.name,
+        madeBy,
+        caughtBy,
+        note,
+        timeToFix,
+        orderNumber,
+        timestamp: new Date().toISOString()
+      });
+      if (data.errorLog.length > 500) data.errorLog = data.errorLog.slice(0, 500);
+
+      // Track per-packer counts
+      if (madeBy) {
+        data.packerErrorsCaught[madeBy] = (data.packerErrorsCaught[madeBy] || 0) + 1;
+        // Also bump legacy total
+        data.packerErrors[madeBy] = (data.packerErrors[madeBy] || 0) + 1;
+      }
+      if (caughtBy) {
+        data.packerErrorsSavedBy[caughtBy] = (data.packerErrorsSavedBy[caughtBy] || 0) + 1;
+      }
+      data.goals.errorCount.current += 1;
+
+      logActivity('✓ ERROR CAUGHT on ' + stream.name +
+        (orderNumber ? ' [order ' + orderNumber + ']' : '') +
+        (madeBy ? ' by ' + madeBy : '') +
+        (caughtBy ? ', saved by ' + caughtBy : '') +
+        (note ? ': ' + note : '') +
+        (timeToFix ? ' (' + timeToFix + ' to fix)' : ''));
+
+      pushUndo({
+        undo: () => {
+          data.errorLog.shift();
+          if (madeBy && data.packerErrorsCaught[madeBy]) {
+            data.packerErrorsCaught[madeBy] = Math.max(0, data.packerErrorsCaught[madeBy] - 1);
+            data.packerErrors[madeBy] = Math.max(0, (data.packerErrors[madeBy] || 0) - 1);
+          }
+          if (caughtBy && data.packerErrorsSavedBy[caughtBy]) {
+            data.packerErrorsSavedBy[caughtBy] = Math.max(0, data.packerErrorsSavedBy[caughtBy] - 1);
+          }
+          data.goals.errorCount.current = Math.max(0, data.goals.errorCount.current - 1);
+        }
+      });
+      showUndo('✓ Caught error' + (caughtBy ? ' (' + caughtBy + ' saved it)' : ''));
+      render();
+    }
+  });
+}
+
+function logErrorShipped(streamId) {
+  if (!currentUser) { showNamePrompt(); return; }
+  if (!isQC()) { denyAction(); return; }
+  const stream = data.streams.find(s => s.id === streamId);
+  if (!stream) return;
+
+  openModal({
+    title: '⚠ Error SHIPPED OUT — ' + stream.name,
+    fields: [
+      { label: 'Order number', name: 'orderNumber', type: 'text', placeholder: 'e.g. #1234 — important for refund/replace' },
+      { label: 'Who packed it?', name: 'madeBy', type: 'select', options: loadRoster() },
+      { label: 'What was the error?', name: 'note', type: 'text', placeholder: 'wrong slab shipped, wrong address, missing card, etc.' },
+      { label: 'Time spent fixing (refund/replace process)', name: 'timeToFix', type: 'select-time' }
+    ],
+    onSubmit: (vals) => {
+      const madeBy = (vals.madeBy || '').trim();
+      const orderNumber = (vals.orderNumber || '').trim();
+      const note = (vals.note || '').trim();
+      const timeToFix = vals.timeToFix || '';
+
+      data.errorLog = data.errorLog || [];
+      data.errorLog.unshift({
+        type: 'shipped',
+        streamId,
+        streamName: stream.name,
+        madeBy,
+        caughtBy: '',
+        note,
+        timeToFix,
+        orderNumber,
+        timestamp: new Date().toISOString()
+      });
+      if (data.errorLog.length > 500) data.errorLog = data.errorLog.slice(0, 500);
+
+      if (madeBy) {
+        data.packerErrorsShipped[madeBy] = (data.packerErrorsShipped[madeBy] || 0) + 1;
+        data.packerErrors[madeBy] = (data.packerErrors[madeBy] || 0) + 1;
+      }
+      data.goals.errorCount.current += 1;
+
+      logActivity('⚠ ERROR SHIPPED OUT on ' + stream.name +
+        (orderNumber ? ' [order ' + orderNumber + ']' : '') +
+        (madeBy ? ' by ' + madeBy : '') +
+        (note ? ': ' + note : '') +
+        (timeToFix ? ' (' + timeToFix + ' to resolve)' : ''),
+        true);
+
+      pushUndo({
+        undo: () => {
+          data.errorLog.shift();
+          if (madeBy && data.packerErrorsShipped[madeBy]) {
+            data.packerErrorsShipped[madeBy] = Math.max(0, data.packerErrorsShipped[madeBy] - 1);
+            data.packerErrors[madeBy] = Math.max(0, (data.packerErrors[madeBy] || 0) - 1);
+          }
+          data.goals.errorCount.current = Math.max(0, data.goals.errorCount.current - 1);
+        }
+      });
+      showUndo('Error shipped logged' + (madeBy ? ' on ' + madeBy : ''));
+      render();
+    }
+  });
+}
+
+function logSetAside(streamId) {
+  if (!currentUser) { showNamePrompt(); return; }
+  if (!isQC()) { denyAction(); return; }
+  const stream = data.streams.find(s => s.id === streamId);
+  if (!stream) return;
+
+  openModal({
+    title: '⊘ Set Aside Package — ' + stream.name,
+    fields: [
+      { label: 'Order number', name: 'orderNumber', type: 'text', placeholder: 'e.g. #1234' },
+      { label: 'Who originally packed it?', name: 'packedBy', type: 'select', options: loadRoster() },
+      { label: 'Why was it set aside?', name: 'reason', type: 'text', placeholder: 'missing card, damaged, waiting on info, etc.' }
+    ],
+    onSubmit: (vals) => {
+      const packedBy = (vals.packedBy || '').trim();
+      const orderNumber = (vals.orderNumber || '').trim();
+      const reason = (vals.reason || '').trim();
+
+      data.setAsideLog = data.setAsideLog || [];
+      data.setAsideLog.unshift({
+        streamId,
+        streamName: stream.name,
+        packedBy,
+        orderNumber,
+        reason,
+        timestamp: new Date().toISOString(),
+        resolved: false
+      });
+      if (data.setAsideLog.length > 500) data.setAsideLog = data.setAsideLog.slice(0, 500);
+
+      if (packedBy) {
+        data.packerSetAside[packedBy] = (data.packerSetAside[packedBy] || 0) + 1;
+        // Also bump legacy reopens counter for back-compat
+        data.packerReopens[packedBy] = (data.packerReopens[packedBy] || 0) + 1;
+      }
+      data.goals.reopenedPackages.current += 1;
+
+      logActivity('⊘ SET ASIDE on ' + stream.name +
+        (orderNumber ? ' [order ' + orderNumber + ']' : '') +
+        (packedBy ? ' packed by ' + packedBy : '') +
+        (reason ? ': ' + reason : ''));
+
+      pushUndo({
+        undo: () => {
+          data.setAsideLog.shift();
+          if (packedBy && data.packerSetAside[packedBy]) {
+            data.packerSetAside[packedBy] = Math.max(0, data.packerSetAside[packedBy] - 1);
+            data.packerReopens[packedBy] = Math.max(0, (data.packerReopens[packedBy] || 0) - 1);
+          }
+          data.goals.reopenedPackages.current = Math.max(0, data.goals.reopenedPackages.current - 1);
+        }
+      });
+      showUndo('Package set aside' + (orderNumber ? ' (' + orderNumber + ')' : ''));
+      render();
+    }
+  });
+}
+
+function flashButton(streamId) {
+  const btn = document.getElementById('bigBtn_' + streamId);
+  if (!btn) return;
+  btn.classList.add('flash');
+  setTimeout(() => btn.classList.remove('flash'), 200);
+}
+
+function adjustStage(streamId, stageId, delta) {
+  if (!isQC()) { denyAction(); return; }
+  const stream = data.streams.find(s => s.id === streamId);
+  if (!stream) return;
+  const stage = stream.stages.find(st => st.id === stageId);
+  if (!stage) return;
+  const old = stage.orders;
+  stage.orders = Math.max(0, stage.orders + delta);
+  if (old !== stage.orders) {
+    logActivity((delta > 0 ? '+' : '') + delta + ' to ' + stream.name + ' → ' + stage.name);
+    // Auto-unmark caught up if new work appears
+    if (stream.caughtUp && !isStreamReadyToBeCaughtUp(stream)) {
+      stream.caughtUp = false;
+      logActivity(stream.name + ' no longer caught up — new work appeared');
+    }
+  }
+  render();
+}
+
+function toggleStream(streamId) {
+  if (!isQC()) { denyAction(); return; }
+  const stream = data.streams.find(s => s.id === streamId);
+  if (!stream) return;
+  stream.active = !stream.active;
+  logActivity((stream.active ? 'resumed ' : 'paused ') + stream.name);
+  render();
+}
+
+function removeStream(streamId) {
+  if (!isManager()) { denyAction('Only Manager can remove streams.'); return; }
+  const stream = data.streams.find(s => s.id === streamId);
+  if (!stream) return;
+  if (!confirm('Remove "' + stream.name + '" entirely?')) return;
+  data.streams = data.streams.filter(s => s.id !== streamId);
+  logActivity('removed stream ' + stream.name);
+  render();
+}
+
+function addStream() {
+  if (!isQC()) { denyAction(); return; }
+  openModal({
+    title: 'Add new stream',
+    fields: [{ label: 'Stream name', name: 'name', type: 'text', placeholder: 'e.g. WHATNOT, TT4 LIVE' }],
+    onSubmit: (vals) => {
+      if (!vals.name) return;
+      const id = 's' + Date.now();
+      data.streams.push({
+        id, name: vals.name.toUpperCase(), active: true, completed: 0, caughtUp: false,
+        stages: [
+          { id: 'wb', name: 'Waiting Bins', orders: 0, assigned: '—', notes: '' },
+          { id: 'sm', name: 'Sorting / Matching', orders: 0, assigned: '', notes: '' },
+          { id: 'pk', name: 'Packaging', orders: 0, assigned: '', notes: '' },
+          { id: 'qc', name: 'QC Check', orders: 0, assigned: '', notes: '' },
+        ],
+      });
+      logActivity('added stream ' + vals.name.toUpperCase());
+      render();
+    }
+  });
+}
+
+function editStreamDetails(streamId) {
+  if (!isQC()) { denyAction(); return; }
+  const stream = data.streams.find(s => s.id === streamId);
+  if (!stream) return;
+  const fields = [{ label: 'Stream name', name: 'name', type: 'text', value: stream.name }];
+  stream.stages.forEach(st => {
+    fields.push({ label: st.name + ' — assigned', name: 'assigned_' + st.id, type: 'text', value: st.assigned });
+    fields.push({ label: st.name + ' — notes', name: 'notes_' + st.id, type: 'text', value: st.notes });
+  });
+  openModal({
+    title: 'Edit ' + stream.name,
+    fields,
+    onSubmit: (vals) => {
+      stream.name = vals.name.toUpperCase();
+      stream.stages.forEach(st => {
+        st.assigned = vals['assigned_' + st.id] || '';
+        st.notes = vals['notes_' + st.id] || '';
+      });
+      logActivity('edited ' + stream.name + ' details');
+      render();
+    }
+  });
+}
+
+function manageRoster() {
+  if (!isQC()) { denyAction(); return; }
+  const roster = loadRoster();
+  openModal({
+    title: 'Manage Packer Roster',
+    fields: [{
+      label: 'Names (one per line) — these show up in the WHO PACKED IT? popup',
+      name: 'names',
+      type: 'textarea',
+      value: roster.join('\n')
+    }],
+    onSubmit: (vals) => {
+      const names = vals.names.split('\n').map(n => n.trim()).filter(Boolean);
+      saveRoster(names);
+      logActivity('updated packer roster: ' + names.join(', '));
+      render();
+    }
+  });
+}
+
+function adjustGoal(key, delta) {
+  if (!isQC()) { denyAction(); return; }
+  const g = data.goals[key];
+  g.current = Math.max(0, g.current + delta);
+  logActivity((delta > 0 ? '+' : '') + delta + ' to ' + key);
+  render();
+}
+
+function editGoalTarget(key) {
+  if (!isManager()) { denyAction('Only Manager can change targets.'); return; }
+  const g = data.goals[key];
+  openModal({
+    title: 'Set target for ' + key,
+    fields: [{ label: 'Target value', name: 'target', type: 'number', value: g.target }],
+    onSubmit: (vals) => {
+      const n = parseInt(vals.target);
+      if (isNaN(n)) return;
+      g.target = n;
+      logActivity('changed ' + key + ' target to ' + n);
+      render();
+    }
+  });
+}
+
+function editNote(field, title) {
+  if (!isQC()) { denyAction(); return; }
+  openModal({
+    title,
+    fields: [{ label: title, name: 'text', type: 'textarea', value: data[field] }],
+    onSubmit: (vals) => {
+      data[field] = vals.text;
+      logActivity('updated ' + field);
+      render();
+    }
+  });
+}
+
+function resetDay() {
+  if (!isManager()) { denyAction('Only Manager can reset the day.'); return; }
+  if (!confirm('Reset day? Clears all completed counts, errors, reopens, EOD note, reconciliation, AND per-packer stats. Backlog stages stay.')) return;
+  data.streams.forEach(s => { s.completed = 0; s.caughtUp = false; });
+  data.goals.ordersCompleted.current = 0;
+  data.goals.errorCount.current = 0;
+  data.goals.reopenedPackages.current = 0;
+  data.endOfDayNote = '';
+  data.reconcileActual = '';
+  data.packerStats = {};
+  data.packerErrors = {};
+  data.packerReopens = {};
+  data.packerErrorsCaught = {};
+  data.packerErrorsShipped = {};
+  data.packerErrorsSavedBy = {};
+  data.packerSetAside = {};
+  data.errorLog = [];
+  data.setAsideLog = [];
+  logActivity('RESET THE DAY');
+  render();
+}
+
+function exportDay() {
+  if (!isQC()) { denyAction(); return; }
+  const date = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const totalCompleted = data.streams.reduce((s, st) => s + st.completed, 0);
+  const totalBacklog = data.streams.filter(s => s.active).reduce((sum, s) => sum + s.stages.reduce((a, st) => a + st.orders, 0), 0);
+
+  let text = 'AKSVR SHIPPING — END OF DAY LOG\n' + date + '\n';
+  text += '========================================\n\n';
+  text += 'BOARD SHIPPED TOTAL: ' + totalCompleted + ' / ' + data.goals.ordersCompleted.target + ' (' + Math.round(totalCompleted/data.goals.ordersCompleted.target*100) + '%)\n';
+
+  const actual = parseInt(data.reconcileActual);
+  if (!isNaN(actual)) {
+    const diff = totalCompleted - actual;
+    text += 'ACTUAL SHIPPING COUNT: ' + actual + '\n';
+    text += 'DIFFERENCE: ' + (diff > 0 ? '+' : '') + diff + (diff === 0 ? ' ✓ MATCH' : ' ⚠') + '\n';
+  } else {
+    text += 'ACTUAL SHIPPING COUNT: (not entered)\n';
+  }
+
+  text += '\nBACKLOG REMAINING: ' + totalBacklog + '\n';
+  text += 'OVERNIGHT BACKLOG: ' + data.goals.overnightBacklog.current + '\n';
+  text += 'TOTAL ERRORS: ' + data.goals.errorCount.current + ' (limit ' + data.goals.errorCount.target + ')\n';
+
+  // Break errors down
+  const errorsCaught = (data.errorLog || []).filter(e => e.type === 'caught').length;
+  const errorsShipped = (data.errorLog || []).filter(e => e.type === 'shipped').length;
+  text += '  ✓ Errors CAUGHT (saved): ' + errorsCaught + '\n';
+  text += '  ⚠ Errors SHIPPED OUT: ' + errorsShipped + '\n';
+  text += 'PACKAGES SET ASIDE: ' + (data.setAsideLog || []).length;
+  const unresolvedSetAside = (data.setAsideLog || []).filter(s => !s.resolved).length;
+  if (unresolvedSetAside > 0) text += ' (' + unresolvedSetAside + ' still unresolved)';
+  text += '\n\n';
+
+  // PER-PACKER section
+  const packers = getPackerTotals();
+  if (packers.some(p => p.total > 0 || p.errorsCaught > 0 || p.errorsShipped > 0 || p.setAside > 0)) {
+    text += '--- PER PACKER ---\n';
+    packers.forEach(p => {
+      const streams = data.streams.map(s => {
+        const n = (p.byStream && p.byStream[s.id]) || 0;
+        return n > 0 ? s.name + '=' + n : null;
+      }).filter(Boolean).join(', ');
+      text += `  ${p.name}: ${p.total} shipped (${p.pct}%)`;
+      if (streams) text += ` | ${streams}`;
+      if (p.errorsCaught) text += ` | errors caught: ${p.errorsCaught}`;
+      if (p.errorsShipped) text += ` | errors shipped: ${p.errorsShipped}`;
+      if (p.errorsSavedBy) text += ` | saved by QC: ${p.errorsSavedBy}`;
+      if (p.setAside) text += ` | set aside: ${p.setAside}`;
+      text += '\n';
+    });
+    text += '\n';
+  }
+
+  // ERROR LOG detail
+  if ((data.errorLog || []).length > 0) {
+    text += '--- ERROR LOG ---\n';
+    data.errorLog.forEach(e => {
+      const t = new Date(e.timestamp);
+      const tStr = t.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:true});
+      const typeLabel = e.type === 'caught' ? '✓ CAUGHT' : '⚠ SHIPPED OUT';
+      text += `  ${tStr} ${typeLabel}`;
+      if (e.orderNumber) text += ` [#${e.orderNumber}]`;
+      if (e.streamName) text += ` (${e.streamName})`;
+      if (e.madeBy) text += ` — made by ${e.madeBy}`;
+      if (e.type === 'caught' && e.caughtBy) text += `, saved by ${e.caughtBy}`;
+      if (e.timeToFix) text += `, ${e.timeToFix} to fix`;
+      text += '\n';
+      if (e.note) text += `    "${e.note}"\n`;
+    });
+    text += '\n';
+  }
+
+  // SET ASIDE log detail
+  if ((data.setAsideLog || []).length > 0) {
+    text += '--- PACKAGES SET ASIDE ---\n';
+    data.setAsideLog.forEach(s => {
+      const t = new Date(s.timestamp);
+      const tStr = t.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:true});
+      text += `  ${tStr}`;
+      if (s.orderNumber) text += ` [#${s.orderNumber}]`;
+      if (s.streamName) text += ` (${s.streamName})`;
+      if (s.packedBy) text += ` — packed by ${s.packedBy}`;
+      if (s.resolved) text += ' [RESOLVED]';
+      else text += ' [STILL UNRESOLVED]';
+      text += '\n';
+      if (s.reason) text += `    "${s.reason}"\n`;
+    });
+    text += '\n';
+  }
+
+  text += '--- PER STREAM ---\n';
+  data.streams.forEach(s => {
+    text += '\n' + s.name + ' ' + (s.active ? '(LIVE)' : '(PAUSED)') + '\n';
+    text += '  Shipped: ' + s.completed + '\n';
+    s.stages.forEach(st => {
+      text += '  ' + st.name + ': ' + st.orders + (st.assigned && st.assigned !== '—' ? ' (' + st.assigned + ')' : '') + (st.notes ? ' - ' + st.notes : '') + '\n';
+    });
+  });
+  text += '\n--- MORNING BRIEF ---\n' + (data.morningNote || '(none)') + '\n';
+  text += '\n--- END-OF-DAY RECAP ---\n' + (data.endOfDayNote || '(none)') + '\n';
+
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'aksvr_eod_' + new Date().toISOString().slice(0,10) + '.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+  logActivity('exported end-of-day log');
+}
+
+/* Modal */
+function openModal({ title, fields, onSubmit }) {
+  const overlay = document.getElementById('modalOverlay');
+  const box = document.getElementById('modalBox');
+  const fieldsHtml = fields.map(f => {
+    if (f.type === 'textarea') {
+      return '<label>' + escapeHtml(f.label) + '</label><textarea name="' + f.name + '" rows="4" placeholder="' + escapeHtml(f.placeholder || '') + '">' + escapeHtml(f.value || '') + '</textarea>';
+    }
+    if (f.type === 'select') {
+      // f.options is an array of strings (roster names)
+      const opts = (f.options || []).map(o => {
+        const sel = (f.value === o) ? ' selected' : '';
+        return '<option value="' + escapeHtml(o) + '"' + sel + '>' + escapeHtml(o) + '</option>';
+      }).join('');
+      return '<label>' + escapeHtml(f.label) + '</label><select name="' + f.name + '" class="modal-select"><option value="">— pick name —</option>' + opts + '</select>';
+    }
+    if (f.type === 'select-time') {
+      return '<label>' + escapeHtml(f.label) + '</label>' +
+        '<select name="' + f.name + '" class="modal-select">' +
+          '<option value="">— pick time —</option>' +
+          '<option value="<5 min">Less than 5 min</option>' +
+          '<option value="5-15 min">5-15 min</option>' +
+          '<option value="15-30 min">15-30 min</option>' +
+          '<option value="30+ min">30+ min</option>' +
+        '</select>';
+    }
+    return '<label>' + escapeHtml(f.label) + '</label><input type="' + f.type + '" name="' + f.name + '" value="' + escapeHtml(f.value || '') + '" placeholder="' + escapeHtml(f.placeholder || '') + '">';
+  }).join('');
+  box.innerHTML = '<h3>' + escapeHtml(title) + '</h3><div id="modalFields">' + fieldsHtml + '</div><div class="modal-buttons"><button class="btn" onclick="closeModal()">CANCEL</button><button class="btn btn-primary" onclick="submitModal()">SAVE</button></div>';
+  overlay.classList.add('show');
+  window._modalSubmit = onSubmit;
+  setTimeout(() => { const i = box.querySelector('input, textarea, select'); if (i) i.focus(); }, 100);
+}
+function submitModal() {
+  const fields = document.querySelectorAll('#modalFields input, #modalFields textarea, #modalFields select');
+  const vals = {};
+  fields.forEach(f => { vals[f.name] = f.value; });
+  // Capture the callback BEFORE closeModal() nulls it out
+  const callback = window._modalSubmit;
+  closeModal();
+  if (callback) callback(vals);
+}
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('show');
+  window._modalSubmit = null;
+}
+
+/* INIT */
+setTimeout(() => setupFirebaseSync(), 500);
+setMode(data.mode || 'quick');
+checkUser();
+updateClock();
+setInterval(updateClock, 1000);
+render();
+
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+    e.preventDefault();
+    undoLast();
+  }
+});
+</script>
+</body>
+</html>
